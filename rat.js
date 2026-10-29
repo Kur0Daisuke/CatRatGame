@@ -8,20 +8,39 @@ export class Rat {
         this.ratModel = null;
 
         this.visionSphere = new THREE.Sphere();
-        this.debugVisionSphere = null;
+        this.collisionSphere = new THREE.Sphere(); 
+        
+        // --- DEBUG WIREFRAME FOR RAT VISION SPHERE ---
+        const debugVisionGeo = new THREE.SphereGeometry(2.5, 16, 16);
+        const debugVisionMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true, transparent: true, opacity: 0.3 });
+        this.debugVisionSphere = new THREE.Mesh(debugVisionGeo, debugVisionMat);
+        this.scene.add(this.debugVisionSphere);
 
         this.guessedPosition = new THREE.Vector3(0, 0, 0);
-        this.guessMesh = null;
+        
+        // --- DEBUG MESH FOR GUESSED POSITION ---
+        const debugGuessGeo = new THREE.SphereGeometry(0.3, 8, 8);
+        const debugGuessMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+        this.guessMesh = new THREE.Mesh(debugGuessGeo, debugGuessMat);
+        this.scene.add(this.guessMesh);
 
         // Idle & Wandering State Variables
-        this.state = 'IDLE'; // 'IDLE', 'TURNING', 'WALKING'
+        this.state = 'IDLE'; 
         this.idleTimer = 0;
         this.idleDuration = 2.0; 
         this.targetDestination = new THREE.Vector3();
-        this.debugTargetMesh = null;
+        
+        // --- DEBUG MESH FOR TARGET DESTINATION ---
+        const debugTargetGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const debugTargetMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
+        this.debugTargetMesh = new THREE.Mesh(debugTargetGeo, debugTargetMat);
+        this.scene.add(this.debugTargetMesh);
+
         this.ratSpeed = 1.0; 
 
-        // --- Grouping & Speech Configuration ---
+        const personalityTypes = ['STRAIGHT_AWAY', 'jumper', 'ERRATIC', 'STARE_DOWN'];
+        this.personality = personalityTypes[Math.floor(Math.random() * personalityTypes.length)];
+
         this.stayInGroup = true;         
         this.groupRadius = 6.0;          
         this.groupingWeight = 0.4;       
@@ -31,35 +50,25 @@ export class Rat {
         this.chatTimeout = null;
         this.groupUpdateTimer = Math.random(); 
 
-        // Unique vibrant color hex for this rat's chat bubbles
         const bubbleColors = ['#ff5733', '#33ff57', '#3357ff', '#f3ff33', '#ff33f3', '#33fff3', '#ff9133'];
         this.chatColor = bubbleColors[Math.floor(Math.random() * bubbleColors.length)];
 
-        // General casual chatter (excludes the alert warning)
         this.conversationTopics = [
-            "Squeak squeak!",
-            "Is there cheese around?",
-            "Keep your voice down!",
-            "Did you hear that?",
-            "Run if the cat comes!",
-            "Nibble nibble...",
-            "Stay close to the group.",
-            "Found some crumbs earlier!",
-            "Too bright out here...",
-            "Let's hide under the floorboards.",
-            "Did you see the big paws?"
+            "Squeak squeak!", "Is there cheese around?", "Keep your voice down!",
+            "Did you hear that?", "Run if the cat comes!", "Nibble nibble...",
+            "Stay close to the group.", "Found some crumbs earlier!",
+            "Too bright out here...", "Let's hide under the floorboards.", "Did you see the big paws?"
         ];
 
-        // Specific alert warning when player is moving in vision
         this.alertTopic = "Quiet! Someone's moving.";
+        this.panicTopic = "OH MY GODD";
+        this.stareDownTopic = "WHAT YOU WANT?";
         
         this.prerenderedTextures = {};
         this.initChatTextures();
 
         this._worldPosition = new THREE.Vector3();
         this.ratContainer = new THREE.Group();
-
-        // --- DEBUG SPAWN: Spawning at 0,0,0 ---
         this.ratContainer.position.set(0, 0, 0);
 
         this.scene.add(this.ratContainer);
@@ -73,27 +82,29 @@ export class Rat {
         this.isEscaping = false;
         this.currentEscapeDir = new THREE.Vector3();
         this.encounterTime = 0;
-        this.fearTimer = 0;
+        this.hasStunnedCat = false; 
 
         this.loadModel();
     }
 
-    // Pre-create textures for all conversation phrases and the alert warning
     initChatTextures() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        const context = canvas.getContext('2d');
-
         this.prerenderedTextures = {};
-        const allPhrases = [...this.conversationTopics, this.alertTopic];
+        const allPhrases = [...this.conversationTopics, this.alertTopic, this.panicTopic, this.stareDownTopic];
 
         for (const quote of allPhrases) {
-            context.clearRect(0, 0, 256, 128);
-
+            let canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 128;
+            let context = canvas.getContext('2d');
+            
+            context.clearRect(0, 0, canvas.width, canvas.height);
             context.fillStyle = this.chatColor; 
             context.beginPath();
-            if (context.roundRect) context.roundRect(10, 10, 236, 80, 16);
+            if (context.roundRect) {
+                context.roundRect(10, 10, 236, 80, 16);
+            } else {
+                context.rect(10, 10, 236, 80); 
+            }
             context.fill();
 
             context.strokeStyle = '#ffffff';
@@ -107,9 +118,9 @@ export class Rat {
             context.fillText(quote, 128, 50, 220);
             
             const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
             this.prerenderedTextures[quote] = texture;
         }
-        
     }
 
     loadModel() {
@@ -126,7 +137,8 @@ export class Rat {
                 }
             });
 
-            this.visionSphere.radius = 1;
+            this.visionSphere.radius = 4.0; 
+            this.collisionSphere.radius = 0.3;
             this.ratContainer.add(this.ratModel);
             Entity.appendEntity("entity", this, 2);
         }, undefined, (err) => console.log(err));
@@ -135,7 +147,7 @@ export class Rat {
     updateGuessPosition(catCenter, ratCenter) {
         const distance = catCenter.distanceTo(ratCenter);
         const sourceDb = 80;       
-        const attenuation = 100;    
+        const attenuation = 40; // Adjusted attenuation for smoother scaling    
         const db = Math.max(sourceDb - attenuation * Math.log10(Math.max(distance, 0.1)), 0);
                 
         const error = 10 * (1 - Math.min(db / 80, 1));
@@ -148,32 +160,61 @@ export class Rat {
         }
     }
 
-    rotateTowards(targetPos) {
+    rotateTowards(targetPos, customSpeed = null) {
         targetPos.y = this.ratContainer.position.y;
         const direction = new THREE.Vector3().subVectors(targetPos, this.ratContainer.position);
         const correctedTarget = this.ratContainer.position.clone().sub(direction);
 
         this.tempMatrix.lookAt(this.ratContainer.position, correctedTarget, new THREE.Vector3(0, 1, 0));
         this.targetQuaternion.setFromRotationMatrix(this.tempMatrix);
-        this.ratContainer.quaternion.slerp(this.targetQuaternion, this.slerpSpeed);
+        
+        const turnRate = customSpeed !== null ? customSpeed : (this.isEscaping ? THREE.MathUtils.lerp(0.15, 0.4, 1.0 - (this.escapeDelay / 0.9)) : this.slerpSpeed);
+        this.ratContainer.quaternion.slerp(this.targetQuaternion, turnRate);
     }
 
-    // --- ESCAPE CODE RESTORED (COMMENTED OUT FOR DEBUGGING) ---
     triggerEscape(catPos) {
-        /*
         if (!this.isEscaping) {
             this.isEscaping = true;
             this.escapeTimer = 0;
-            this.currentEscapeDir.subVectors(this.ratContainer.position, catPos).normalize();
-            this.currentEscapeDir.y = 0;
             this.state = 'ESCAPING';
-            if (this.chatBubbleSprite) {
-                this.ratContainer.remove(this.chatBubbleSprite);
-                this.chatBubbleSprite = null;
+            this.isSpeaking = true;
+            this.hasStunnedCat = false;
+
+            const baseDirAway = new THREE.Vector3().subVectors(this.ratContainer.position, catPos).normalize();
+            baseDirAway.y = 0;
+            const panicJitter = Math.min(this.encounterTime * 0.15, Math.PI * 0.35);
+
+            switch (this.personality) {
+                case 'STRAIGHT_AWAY':
+                    const jitterAngle = (Math.random() - 0.5) * panicJitter;
+                    this.currentEscapeDir.copy(baseDirAway).applyAxisAngle(new THREE.Vector3(0, 1, 0), jitterAngle).normalize();
+                    this.escapeDelay = Math.max(0.3, 0.5 - (this.encounterTime * 0.05)); 
+                    this.showChatBubble(this.panicTopic);
+                    break;
+
+                case 'jumper':
+                    const dirToCat = new THREE.Vector3().subVectors(catPos, this.ratContainer.position).normalize();
+                    dirToCat.y = 0;
+                    this.currentEscapeDir.copy(dirToCat);
+                    this.escapeDelay = 0.9; 
+                    this.escapeDuration = 2.5;
+                    this.showChatBubble(this.panicTopic);
+                    break;
+
+                case 'ERRATIC':
+                    const randomAngle = (Math.random() - 0.5) * Math.PI * (0.8 + this.encounterTime * 0.1);
+                    this.currentEscapeDir.copy(baseDirAway).applyAxisAngle(new THREE.Vector3(0, 1, 0), randomAngle).normalize();
+                    this.escapeDelay = Math.max(0.3, 0.6 - (this.encounterTime * 0.05));
+                    this.showChatBubble(this.panicTopic);
+                    break;
+
+                case 'STARE_DOWN':
+                    this.currentEscapeDir.copy(baseDirAway);
+                    this.escapeDelay = Math.max(0.6, 1.6 - (this.encounterTime * 0.15)); 
+                    this.showChatBubble(this.stareDownTopic);
+                    break;
             }
-            this.isSpeaking = false;
         }
-        */
     }
 
     showChatBubble(text) {
@@ -182,17 +223,11 @@ export class Rat {
             this.chatBubbleSprite = null;
         }
 
-        let texture = this.prerenderedTextures[text];
-        
-        if (!texture) {
-            texture = this.prerenderedTextures["Squeak squeak!"];
-        }
-
+        let texture = this.prerenderedTextures[text] || this.prerenderedTextures["Squeak squeak!"];
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
         this.chatBubbleSprite = new THREE.Sprite(spriteMaterial);
         this.chatBubbleSprite.scale.set(1.5, 0.75, 1);
         this.chatBubbleSprite.position.set(0, 0.8, 0);
-        console.log(this.chatBubbleSprite)
 
         this.ratContainer.add(this.chatBubbleSprite);
 
@@ -206,17 +241,12 @@ export class Rat {
         }, 3000);
     }
 
-    // Casual idle small talk
-    // Casual idle small talk
     async trySmallTalk() {
         if (this.nearbyRats.length > 0 && !this.isSpeaking && Entity.player && Entity.player.entity) {
             const playerEntity = Entity.player.entity;
             const isColliding = playerEntity.aerialSphere.intersectsSphere(this.visionSphere);
-            
-                // Check if keys are pressed OR check if the player is actively changing position
             const isMovingKeys = playerEntity.walkDirectionX !== 0 || playerEntity.walkDirectionZ !== 0;
 
-            // Only trigger alert if colliding AND keys are pressed
             if (isColliding && isMovingKeys && Math.random() < 0.2) {
                 this.isSpeaking = true;
                 const catCenter = playerEntity.aerialSphere.center;
@@ -225,24 +255,9 @@ export class Rat {
                 this.idleDuration += 3.0;
                 return;
             }
-
-            // Standard casual chatter
-            if (Math.randomStr ? false : Math.random() < 0.4) {
-                this.isSpeaking = true;
-                const availablePeers = this.nearbyRats.filter(r => !r.isSpeaking);
-                if (availablePeers.length > 0) {
-                    const partner = availablePeers[Math.floor(Math.random() * availablePeers.length)];
-                    this.rotateTowards(partner.ratContainer.position.clone());
-
-                    const randomQuote = this.conversationTopics[Math.floor(Math.random() * this.conversationTopics.length)];
-                    this.showChatBubble(randomQuote);
-                    this.idleDuration += 3.0; 
-                } else {
-                    this.isSpeaking = false;
-                }
-            }
         }
     }
+
     pickRandomDestination() {
         const radius = 3 + Math.random() * 4; 
         const angle = Math.random() * Math.PI * 2;
@@ -251,14 +266,11 @@ export class Rat {
         let randomZ = this.ratContainer.position.z + Math.sin(angle) * radius;
 
         if (this.stayInGroup && this.nearbyRats.length > 0) {
-            let centerSumX = 0;
-            let centerSumZ = 0;
-            
+            let centerSumX = 0, centerSumZ = 0;
             for (const otherRat of this.nearbyRats) {
                 centerSumX += otherRat.ratContainer.position.x;
                 centerSumZ += otherRat.ratContainer.position.z;
             }
-
             const groupCenterX = centerSumX / this.nearbyRats.length;
             const groupCenterZ = centerSumZ / this.nearbyRats.length;
 
@@ -275,7 +287,6 @@ export class Rat {
     update(deltaTime) {
         if (!this.ratModel || !Entity.player) return;
 
-        // Throttled Neighbor Checks to optimize performance
         this.groupUpdateTimer += deltaTime;
         if (this.groupUpdateTimer >= 0.3) {
             this.groupUpdateTimer = 0;
@@ -293,48 +304,47 @@ export class Rat {
             }
         }
 
-        if (this.fearTimer > 0) {
-            this.fearTimer -= deltaTime;
-        } else {
-            this.encounterTime = 0;
-            this.escapeDelay = 0.9;
-        }
-
         const playerEntity = Entity.player.entity;
         const catCenter = playerEntity.aerialSphere.center;
         const ratCenter = this.visionSphere.center;
         const ratPos = this.ratContainer.position;
 
-        if (!this.isEscaping) {
-            if (playerEntity.aerialSphere.intersectsSphere(this.visionSphere)) {
-                if (playerEntity.stoppedMoving) {
-                    this.updateGuessPosition(catCenter, ratCenter);
-                }
-            }
-            
-            // ... rest of your state machine (IDLE, TURNING, WALKING)
+        this.collisionSphere.center.copy(ratPos);
 
-            // --- ESCAPE / CONTAGIOUS PANIC CODE (COMMENTED OUT FOR DEBUGGING) ---
-            /*
-            const targetPosition = this.guessedPosition.clone();
-            targetPosition.y = ratPos.y;
-            const dirToGuess = new THREE.Vector3().subVectors(targetPosition, ratPos).normalize();
-            const ratForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.ratContainer.quaternion);
-            
-            const rotationAlignment = ratForward.dot(dirToGuess);
+        const playerHiddenInBush = playerEntity.hiddenInBush;
+        const playerMoving = playerEntity.isMoving;
+
+        if (!this.isEscaping) {
+            let directCollision = playerEntity.collisionSphere.intersectsSphere(this.collisionSphere);
+            let inVisionRange = playerEntity.aerialSphere.intersectsSphere(this.visionSphere);
+
+            // --- DISTANCE-BASED DECIBEL ATTENUATION FORMULA ---
+            const distanceToCat = ratPos.distanceTo(catCenter);
+            const sourceDecibels = playerMoving ? 85.0 : 15.0; // Base sound emitted by moving vs idle cat
+            const attenuationFactor = 40.0;
+            const perceivedDecibels = Math.max(sourceDecibels - attenuationFactor * Math.log10(Math.max(distanceToCat, 0.2)), 0.0);
+            const hearingThreshold = 30.0; // Minimum decibels required for a rat to notice
+
+            // Hearing check: Rats hear louder sounds when nearer, quieter/none when far
+            let canHearCat = inVisionRange && (perceivedDecibels >= hearingThreshold);
+            let canSeeCat = inVisionRange && (!playerHiddenInBush || playerMoving);
+
+            if (canHearCat) {
+                // Sound heard: guess position and turn toward the noise source
+                this.updateGuessPosition(catCenter, ratCenter);
+                this.rotateTowards(this.guessedPosition.clone());
+            }
+
             let dangerDetected = false;
-            if (playerEntity.collisionSphere.intersectsSphere(this.visionSphere)) {
+            if (directCollision) {
                 dangerDetected = true;
-            } else if (rotationAlignment >= 0.9) {
-                const maxDistance = 4;
-                const distanceToCat = ratPos.distanceTo(catCenter);
-                if (distanceToCat <= maxDistance) {
+            } else if (canSeeCat) {
+                const ratForward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.ratContainer.quaternion);
+                if (distanceToCat <= 4) {
                     const dirToCat = new THREE.Vector3().subVectors(catCenter, ratPos).normalize();
                     const dotProduct = ratForward.dot(dirToCat);
-                    const fovThreshold = 0.5;
-
-                    if (dotProduct >= fovThreshold) {
-                        dangerDetected = true;
+                    if (dotProduct >= 0.5) {
+                        dangerDetected = true; // Fully spotted by sight
                     }
                 }
             }
@@ -351,14 +361,7 @@ export class Rat {
             if (dangerDetected) {
                 this.triggerEscape(catCenter);
                 this.encounterTime++;
-                this.fearTimer = 10; 
-
-                const baseDelay = 0.9;
-                this.escapeDelay = Math.max(0.1, baseDelay - (this.encounterTime * 0.15));
             } else {
-            */
-            
-            {
                 if (this.state === 'IDLE') {
                     this.idleTimer += deltaTime;
                     if (this.idleTimer >= this.idleDuration) {
@@ -367,20 +370,16 @@ export class Rat {
                     }
                 } else if (this.state === 'TURNING') {
                     this.rotateTowards(this.targetDestination.clone());
-
                     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.ratContainer.quaternion);
                     const toTarget = new THREE.Vector3().subVectors(this.targetDestination, ratPos).normalize();
                     toTarget.y = 0;
-
                     if (forward.dot(toTarget) > 0.95) {
                         this.state = 'WALKING';
                     }
                 } else if (this.state === 'WALKING') {
                     const dirToDest = new THREE.Vector3().subVectors(this.targetDestination, ratPos);
                     dirToDest.y = 0;
-                    const distanceToDest = dirToDest.length();
-
-                    if (distanceToDest < 0.2) {
+                    if (dirToDest.length() < 0.2) {
                         this.state = 'IDLE';
                         this.idleTimer = 0;
                         this.idleDuration = 1.5 + Math.random() * 3.0; 
@@ -397,20 +396,59 @@ export class Rat {
         if (this.isEscaping) {
             this.escapeTimer += deltaTime;
 
-            const lookTarget = ratPos.clone().add(this.currentEscapeDir);
-            this.rotateTowards(lookTarget);
+            if (this.personality === 'jumper') {
+                if (this.escapeTimer < this.escapeDelay) {
+                    const chargeSpeed = 4.2;
+                    this.ratContainer.position.addScaledVector(this.currentEscapeDir, chargeSpeed * deltaTime);
 
-            if (this.escapeTimer >= this.escapeDelay) {
-                const escapeSpeed = 3.5; 
-                this.ratContainer.position.addScaledVector(this.currentEscapeDir, escapeSpeed * deltaTime);
+                    const jumpProgress = this.escapeTimer / this.escapeDelay;
+                    const highJumpHeight = Math.sin(jumpProgress * Math.PI) * 2.8;
+                    this.ratModel.position.y = 0.1 + Math.max(0, highJumpHeight);
+
+                    if (!this.hasStunnedCat && jumpProgress >= 0.2 && jumpProgress <= 0.85) {
+                        const distToCat = ratPos.distanceTo(catCenter);
+                        if (distToCat < 3.5 && playerEntity.stun) {
+                            playerEntity.stun(1.5);
+                            this.hasStunnedCat = true;
+                        }
+                    }
+                } else {
+                    if (this.escapeTimer - deltaTime < this.escapeDelay) {
+                        const baseDirAway = new THREE.Vector3().subVectors(ratPos, catCenter).normalize();
+                        baseDirAway.y = 0;
+                        this.currentEscapeDir.copy(baseDirAway);
+                    }
+                    const escapeSpeed = 3.8;
+                    this.ratContainer.position.addScaledVector(this.currentEscapeDir, escapeSpeed * deltaTime);
+                    this.ratModel.position.y = 0.1;
+                }
+            } else {
+                if (this.escapeTimer >= this.escapeDelay) {
+                    const escapeSpeed = Math.min(3.5 + (this.encounterTime * 0.2), 5.2); 
+                    this.ratContainer.position.addScaledVector(this.currentEscapeDir, escapeSpeed * deltaTime);
+                    this.ratModel.position.y = 0.1; 
+                } else {
+                    const jumpProgress = this.escapeTimer / this.escapeDelay;
+                    const smallHopHeight = Math.sin(jumpProgress * Math.PI) * 0.5;
+                    this.ratModel.position.y = 0.1 + Math.max(0, smallHopHeight);
+                }
             }
+
+            let lookTarget = (this.personality === 'STARE_DOWN' && this.escapeTimer < this.escapeDelay)
+                ? catCenter.clone() 
+                : ratPos.clone().add(this.currentEscapeDir);
+
+            const panicTurnSpeed = THREE.MathUtils.lerp(0.2, 0.6, 1.0 - (this.escapeDelay / 0.9));
+            this.rotateTowards(lookTarget, panicTurnSpeed);
 
             if (this.escapeTimer >= this.escapeDuration) {
                 this.isEscaping = false;
                 this.state = 'IDLE';
                 this.idleTimer = 0;
+                this.ratModel.position.y = 0.1;
             }
         } else {
+            this.ratModel.position.y = 0.1; 
             if (this.state === 'IDLE' && this.guessedPosition.lengthSq() > 0) {
                 this.rotateTowards(this.guessedPosition.clone());
             }
