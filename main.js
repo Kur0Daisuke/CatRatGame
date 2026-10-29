@@ -5,6 +5,7 @@ import { Rat } from './rat.js';
 import { loadEnvironment } from './environment.js';
 import { debugSettings, setWireframesVisible, onWireframesChange } from './debugSettings.js';
 import { PounceSystem } from './pounce.js';
+import { CatSoundVisual } from './soundVisual.js';
 
 const { scene, camera, renderer, composer, stylizedPass } = setupScene();
 
@@ -29,10 +30,11 @@ camera.position.set(15, Math.sin(look.pitch) * cameraDistance, 15 + Math.cos(loo
 camera.lookAt(15, 0.45, 15);
 
 const pounce = new PounceSystem({ camera, renderer, player, rats });
+const soundVisual = new CatSoundVisual(scene);
 
 const hint = document.createElement('div');
 hint.className = 'hint';
-hint.textContent = 'WASD to move. E to pounce on a nearby rat, then click the highlight. H toggles collision wireframes.';
+hint.textContent = 'WASD move · Shift run · Ctrl sneak · E pounce · SPACE skill check · H wireframes';
 document.body.appendChild(hint);
 
 const debugPanel = document.createElement('div');
@@ -93,6 +95,8 @@ function animate(time) {
     const delta = Math.min(clock.getDelta(), 0.05);
 
     player.update(delta, bushes, look.yaw);
+
+    soundVisual.update(player, delta);
 
     rats.forEach((rat) => rat.update(delta));
     pounce.update(delta);

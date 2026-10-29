@@ -3,9 +3,14 @@ import * as THREE from 'three';
 const POUNCE_RANGE = 2.35;
 const LEAP_DURATION = 0.42;
 const PIN_DURATION = 0.38;
-const QTE_DURATION = 3.4;
-const QTE_ZONE_PERCENT = 16;
 const CAMERA_BLEND = 7.5;
+
+/** Dead by Daylight–style check tuning per rat type. */
+const QTE_BY_KIND = {
+    dumb: { speed: 0.78, zoneWidth: 0.19, duration: 4.4, speedJitter: 0.08 },
+    scout: { speed: 1.42, zoneWidth: 0.11, duration: 3.5, speedJitter: 0.18 },
+    pouncer: { speed: 1.05, zoneWidth: 0.14, duration: 3.8, speedJitter: 0.35 }
+};
 
 export class PounceSystem {
     constructor({ camera, renderer, player, rats }) {
@@ -19,8 +24,13 @@ export class PounceSystem {
         this.promptRat = null;
         this.elapsed = 0;
         this.score = 0;
-        this.qteTime = 0;
         this.resolved = false;
+
+        this.qteMarker = 0;
+        this.qteDirection = 1;
+        this.qteZoneStart = 0.35;
+        this.qteConfig = null;
+        this.qteSpeed = 1;
 
         this._world = new THREE.Vector3();
         this._screen = new THREE.Vector3();
@@ -58,18 +68,19 @@ export class PounceSystem {
         this.overlayEl.hidden = true;
         this.overlayEl.innerHTML = `
             <div class="pounce-qte">
-                <div class="pounce-qte-label">Click the highlight</div>
+                <div class="pounce-qte-label">Press <kbd class="pounce-qte-key">SPACE</kbd> in the zone</div>
                 <div class="pounce-qte-track">
                     <div class="pounce-qte-zone"></div>
+                    <div class="pounce-qte-marker"></div>
                 </div>
                 <div class="pounce-qte-timer"><div class="pounce-qte-timer-fill"></div></div>
             </div>
-            <div class="pounce-cursor"></div>
         `;
         document.body.appendChild(this.overlayEl);
         this.zoneEl = this.overlayEl.querySelector('.pounce-qte-zone');
+        this.markerEl = this.overlayEl.querySelector('.pounce-qte-marker');
         this.timerFillEl = this.overlayEl.querySelector('.pounce-qte-timer-fill');
-        this.cursorEl = this.overlayEl.querySelector('.pounce-cursor');
+        this.qteLabelEl = this.overlayEl.querySelector('.pounce-qte-label');
 
         this.toastEl = document.createElement('div');
         this.toastEl.className = 'pounce-toast';
@@ -79,21 +90,30 @@ export class PounceSystem {
 
     bindInput() {
         window.addEventListener('keydown', (event) => {
-            if (event.repeat || event.code !== 'KeyE') return;
+            if (event.repeat) return;
+
+            if (event.code === 'Space' && this.state === 'qte' && !this.resolved) {
+                event.preventDefault();
+                this.resolveQte(this.isMarkerInZone());
+                return;
+            }
+
+            if (event.code !== 'KeyE') return;
             if (this.isActive()) return;
             this.tryStart();
         });
 
-        this.overlayEl.addEventListener('mousemove', (event) => {
-            this.cursorEl.style.transform = `translate(${event.clientX}px, ${event.clientY}px) translate(-50%, -50%)`;
-        });
-        this.overlayEl.addEventListener('mousedown', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (this.state !== 'qte' || this.resolved) return;
-            this.resolveQte(this.hitZone(event.clientX, event.clientY));
-        });
         this.overlayEl.addEventListener('contextmenu', (event) => event.preventDefault());
+    }
+
+    buildQteConfig(rat) {
+        const base = QTE_BY_KIND[rat?.kind] || QTE_BY_KIND.dumb;
+        const speedMul = 1 + (Math.random() * 2 - 1) * base.speedJitter;
+        return {
+            speed: base.speed * speedMul,
+            zoneWidth: base.zoneWidth,
+            duration: base.duration
+        };
     }
 
     findPounceableRat() {
@@ -122,6 +142,7 @@ export class PounceSystem {
         this.resolved = false;
         this.hidePrompt();
         rat.beginPin();
+        rat.markAlerted?.(5);
         this.player.beginLeap(this.landingSpot(rat), LEAP_DURATION);
     }
 
@@ -146,7 +167,7 @@ export class PounceSystem {
         this.elapsed += delta;
         const rat = this.targetRat;
 
-        if (!rat || rat.isConsumed && this.state !== 'consuming') {
+        if (!rat || (rat.isConsumed && this.state !== 'consuming')) {
             this.abortToIdle();
             return;
         }
@@ -173,7 +194,7 @@ export class PounceSystem {
 
         if (this.state === 'qte') {
             this.updateQte(delta);
-            if (this.elapsed >= QTE_DURATION && !this.resolved) {
+            if (this.elapsed >= this.qteConfig.duration && !this.resolved) {
                 this.resolveQte(false);
             }
             return;
@@ -188,32 +209,66 @@ export class PounceSystem {
     }
 
     beginQte() {
+        const rat = this.targetRat;
         this.state = 'qte';
         this.elapsed = 0;
-        this.qteTime = Math.random() * Math.PI * 2;
         this.resolved = false;
+        this.qteConfig = this.buildQteConfig(rat);
+        this.qteSpeed = this.qteConfig.speed;
+        this.qteMarker = Math.random() < 0.5 ? 0.08 : 0.92;
+        this.qteDirection = this.qteMarker < 0.5 ? 1 : -1;
+
+        const margin = 0.08;
+        const maxStart = 1 - this.qteConfig.zoneWidth - margin;
+        this.qteZoneStart = margin + Math.random() * Math.max(maxStart - margin, 0.05);
+
         this.overlayEl.hidden = false;
-        this.cursorEl.style.transform = `translate(${window.innerWidth * 0.5}px, ${window.innerHeight * 0.5}px) translate(-50%, -50%)`;
+        if (this.qteLabelEl) {
+            const kindLabel = rat?.kind ? ` (${rat.kind})` : '';
+            this.qteLabelEl.innerHTML =
+                `Press <kbd class="pounce-qte-key">SPACE</kbd> in the zone${kindLabel}`;
+        }
         if (document.pointerLockElement) {
             document.exitPointerLock();
         }
-        this.updateQte(0);
+        this.applyQteVisuals();
     }
 
-    updateQte(delta) {
-        this.qteTime += delta;
-        const swing = (Math.sin(this.qteTime * 2.55) + 1) * 0.5;
-        const maxLeft = 100 - QTE_ZONE_PERCENT;
-        this.zoneEl.style.width = `${QTE_ZONE_PERCENT}%`;
-        this.zoneEl.style.left = `${swing * maxLeft}%`;
-        const remaining = 1 - THREE.MathUtils.clamp(this.elapsed / QTE_DURATION, 0, 1);
+    applyQteVisuals() {
+        const cfg = this.qteConfig;
+        if (!cfg) return;
+        this.zoneEl.style.width = `${cfg.zoneWidth * 100}%`;
+        this.zoneEl.style.left = `${this.qteZoneStart * 100}%`;
+        this.markerEl.style.left = `${this.qteMarker * 100}%`;
+        const remaining = 1 - THREE.MathUtils.clamp(this.elapsed / cfg.duration, 0, 1);
         this.timerFillEl.style.transform = `scaleX(${remaining})`;
     }
 
-    hitZone(x, y) {
-        const rect = this.zoneEl.getBoundingClientRect();
-        const pad = 4;
-        return x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
+    updateQte(delta) {
+        const cfg = this.qteConfig;
+        if (!cfg) return;
+
+        const wobble = 1 + Math.sin(this.elapsed * 7.5) * 0.04;
+        this.qteMarker += this.qteDirection * cfg.speed * wobble * delta;
+        if (this.qteMarker >= 1) {
+            this.qteMarker = 1;
+            this.qteDirection = -1;
+        } else if (this.qteMarker <= 0) {
+            this.qteMarker = 0;
+            this.qteDirection = 1;
+        }
+
+        this.applyQteVisuals();
+    }
+
+    isMarkerInZone() {
+        const cfg = this.qteConfig;
+        if (!cfg) return false;
+        const pad = 0.012;
+        return (
+            this.qteMarker >= this.qteZoneStart - pad &&
+            this.qteMarker <= this.qteZoneStart + cfg.zoneWidth + pad
+        );
     }
 
     resolveQte(success) {
@@ -238,7 +293,7 @@ export class PounceSystem {
         if (rat) {
             rat.releaseAndFlee(this.player.container.position);
         }
-        this.showToast('It got away!', 'fail');
+        this.showToast('Missed the skill check!', 'fail');
         this.returnToIdle(true);
     }
 
@@ -326,6 +381,7 @@ export class PounceSystem {
         this.targetRat = null;
         this.elapsed = 0;
         this.resolved = false;
+        this.qteConfig = null;
         this.overlayEl.hidden = true;
         this.player.endPounce();
         if (relock) this.relockPointer();

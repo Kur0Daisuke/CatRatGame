@@ -13,7 +13,7 @@ export function xzDistanceToBox(point, box) {
  * 0 = open field, 1 = fully inside bush cover.
  * Uses a soft falloff outside the bush footprint so enter/exit eases in.
  */
-export function computeBushBlend(position, bushes, fadeRadius = 0.45) {
+export function computeBushBlend(position, bushes, fadeRadius = 0.55) {
     if (!bushes || bushes.length === 0) return 0;
 
     let blend = 0;

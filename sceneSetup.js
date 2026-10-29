@@ -6,8 +6,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 export function setupScene() {
     const scene = new THREE.Scene();
     
-    scene.background = new THREE.Color(0xc5d8ee);
-    scene.fog = new THREE.Fog(0xc5d8ee, 32, 78);
+    scene.background = new THREE.Color(0x9fd4ff);
+    scene.fog = new THREE.Fog(0xb8dcff, 48, 110);
 
     const sky = new THREE.Mesh(
         new THREE.SphereGeometry(420, 24, 16),
@@ -16,8 +16,8 @@ export function setupScene() {
             depthWrite: false,
             fog: false,
             uniforms: {
-                topColor: { value: new THREE.Color(0x7eb4e6) },
-                horizonColor: { value: new THREE.Color(0xe7f0dc) }
+                topColor: { value: new THREE.Color(0x5eb0ff) },
+                horizonColor: { value: new THREE.Color(0xfff6d4) }
             },
             vertexShader: `
                 varying vec3 vDir;
@@ -47,8 +47,8 @@ export function setupScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
@@ -94,10 +94,10 @@ export function setupScene() {
     const stylizedPass = new ShaderPass(StylizedShader);
     composer.addPass(stylizedPass);
 
-    const skyFill = new THREE.HemisphereLight(0xfff4e0, 0x5d7a48, 0.95);
+    const skyFill = new THREE.HemisphereLight(0xfff9ef, 0x7ec850, 1.35);
     scene.add(skyFill);
 
-    const sunLight = new THREE.DirectionalLight(0xfff1d0, 2.7);
+    const sunLight = new THREE.DirectionalLight(0xfff6cc, 3.2);
     sunLight.position.set(24, 36, 14);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
@@ -114,7 +114,7 @@ export function setupScene() {
     scene.add(sunLight);
     scene.add(sunLight.target);
 
-    const fillLight = new THREE.DirectionalLight(0xc5d4f2, 0.45);
+    const fillLight = new THREE.DirectionalLight(0xe8f4ff, 0.85);
     fillLight.position.set(-16, 10, -12);
     scene.add(fillLight);
 
@@ -130,8 +130,8 @@ export function setupScene() {
 
     const material = new THREE.MeshStandardMaterial({ 
         map: myTexture,
-        color: 0xffffff,
-        roughness: 1,
+        color: 0xd8f5a8,
+        roughness: 0.92,
         metalness: 0
     });
     const flatObject = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), material);

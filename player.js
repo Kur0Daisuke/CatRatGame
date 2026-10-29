@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Entity } from './entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ } from './collision.js';
+import { computeCatSourceDecibels } from './catSound.js';
 
 export class Player {
     constructor(scene) {
@@ -12,9 +13,17 @@ export class Player {
         this.scene.add(this.container);
 
         this.carModel = null;
-        this.speed = 2;
+        this.walkSpeed = 2;
+        this.runSpeed = 4.85;
+        this.sneakSpeed = 1.15;
+        this.speed = this.walkSpeed;
         this.walkDirectionX = 0;
         this.walkDirectionZ = 0;
+        this.isRunning = false;
+        this.isSneaking = false;
+        this.shiftHeld = false;
+        this.ctrlHeld = false;
+        this.soundTime = 0;
 
         this.targetQuaternion = new THREE.Quaternion();
         this.tempMatrix = new THREE.Matrix4();
@@ -26,7 +35,9 @@ export class Player {
 
         this.soundDecibel = 0;
         this.aerialSphere = new THREE.Sphere();
+        this.sightSphere = new THREE.Sphere();
         this.collisionSphere = new THREE.Sphere();
+        this.baseAerialRadius = 4;
 
         // Stun & Recovery Configuration
         this.isStunned = false;
@@ -60,11 +71,16 @@ export class Player {
             this.carModel.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
+                    if (child.material) {
+                        child.material.transparent = false;
+                        child.material.opacity = 1;
+                    }
                 }
             });
             this.targetQuaternion.copy(this.container.quaternion);
 
-            this.aerialSphere.radius = 4;
+            this.aerialSphere.radius = this.baseAerialRadius;
+            this.sightSphere.radius = this.baseAerialRadius;
             this.collisionSphere.radius = 0.5;
 
             Entity.appendEntity("player", this, 1);
@@ -73,6 +89,8 @@ export class Player {
 
     initControls() {
         window.addEventListener("keydown", (e) => {
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftHeld = true;
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.ctrlHeld = true;
             if (this.isStunned || this.isRecovering || this.isLocked) return;
             switch(e.key) {
                 case "d": this.walkDirectionX = 1; break;
@@ -83,6 +101,8 @@ export class Player {
         });
 
         window.addEventListener("keyup", (e) => {
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftHeld = false;
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.ctrlHeld = false;
             switch(e.key) {
                 case "d":
                 case "a": this.walkDirectionX = 0; break;
@@ -156,37 +176,39 @@ export class Player {
     }
 
     update(delta, bushes = [], cameraYaw = 0) {
-        if(!this.aerialSphere || !this.collisionSphere) return;
+        if (!this.aerialSphere || !this.sightSphere || !this.collisionSphere) return;
 
         if (this.leapActive) {
             this.updateLeap(delta);
         }
 
         const bodyCenter = this.container.position;
-        this.aerialSphere.center.set(bodyCenter.x, bodyCenter.y + 0.35, bodyCenter.z);
+        const sphereY = bodyCenter.y + 0.35;
+        this.aerialSphere.center.set(bodyCenter.x, sphereY, bodyCenter.z);
+        this.aerialSphere.radius = this.baseAerialRadius;
+        this.sightSphere.center.set(bodyCenter.x, sphereY, bodyCenter.z);
         this.collisionSphere.center.set(bodyCenter.x, bodyCenter.y + 0.25, bodyCenter.z);
 
         this.targetBushBlend = computeBushBlend(bodyCenter, bushes);
         const bushLerp = 1 - Math.exp(-10 * delta);
         this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, this.targetBushBlend, bushLerp);
         this.hiddenInBush = this.bushBlend > 0.52;
+        this.sightSphere.radius = THREE.MathUtils.lerp(
+            this.baseAerialRadius,
+            0.15,
+            this.bushBlend
+        );
         this.isMoving = this.walkDirectionX !== 0 || this.walkDirectionZ !== 0;
+        this.isRunning = this.isMoving && this.shiftHeld && !this.ctrlHeld;
+        this.isSneaking = this.isMoving && this.ctrlHeld && !this.shiftHeld;
+        this.speed = this.isRunning
+            ? this.runSpeed
+            : this.isSneaking
+              ? this.sneakSpeed
+              : this.walkSpeed;
 
-        if (this.isMoving) {
-            this.soundDecibel = 65.0; 
-        } else {
-            this.soundDecibel = 10.0; 
-        }
-
-        if (this.carModel) {
-            const stealthOpacity = THREE.MathUtils.lerp(1.0, 0.32, this.bushBlend);
-            this.carModel.traverse((child) => {
-                if (child.isMesh && !child.geometry.type.includes('Sphere')) {
-                    child.material.transparent = stealthOpacity < 0.99;
-                    child.material.opacity = stealthOpacity;
-                }
-            });
-        }
+        this.soundTime += delta;
+        this.soundDecibel = computeCatSourceDecibels(this, this.soundTime);
 
         if (this.leapActive || this.isLocked) {
             return;

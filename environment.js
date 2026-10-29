@@ -40,8 +40,14 @@ export function loadEnvironment(scene) {
                 }
             });
             scene.add(bushInstance);
+            bushInstance.updateMatrixWorld(true);
 
             const box = new THREE.Box3().setFromObject(bushInstance);
+            const pad = 0.35;
+            box.min.x -= pad;
+            box.min.z -= pad;
+            box.max.x += pad;
+            box.max.z += pad;
             box.min.y = -0.05;
             box.max.y = 2.5;
             

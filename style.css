@@ -128,20 +128,18 @@ html, body{
     justify-content: center;
     padding-top: 36vh;
     background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
-    cursor: none;
+    cursor: default;
 }
 
-.pounce-cursor{
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 18px;
-    height: 18px;
-    border: 2px solid #f7f3ea;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 10px rgba(246, 211, 107, 0.45);
-    pointer-events: none;
-    z-index: 8;
+.pounce-qte-key{
+    display: inline-block;
+    min-width: 4.5em;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    font: 700 12px/1.4 system-ui, sans-serif;
+    letter-spacing: 0.06em;
 }
 
 .pounce-qte-overlay[hidden],
@@ -185,7 +183,20 @@ html, body{
     border-radius: 999px;
     background: linear-gradient(180deg, #ffe58a, #f0b429);
     box-shadow: 0 0 16px rgba(240, 180, 41, 0.65);
-    cursor: pointer;
+    pointer-events: none;
+}
+
+.pounce-qte-marker{
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    width: 4px;
+    margin-left: -2px;
+    border-radius: 2px;
+    background: #f7f3ea;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.85), 0 0 4px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    transform: translateX(-50%);
 }
 
 .pounce-qte-timer{
@@ -226,4 +237,54 @@ html, body{
     color: #f3d4c8;
     background: rgba(18, 22, 28, 0.78);
     border: 1px solid rgba(220, 120, 90, 0.45);
+}
+
+.noise-meter{
+    position: fixed;
+    left: 16px;
+    bottom: 56px;
+    z-index: 11;
+    width: min(220px, 42vw);
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(18, 22, 28, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #eef2f7;
+    font: 12px/1.3 system-ui, sans-serif;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.2s ease;
+}
+
+.noise-meter--loud{
+    border-color: rgba(255, 120, 80, 0.55);
+}
+
+.noise-meter-label{
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 10px;
+    opacity: 0.85;
+    margin-bottom: 6px;
+}
+
+.noise-meter-track{
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.noise-meter-fill{
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    transition: width 0.08s linear, background 0.15s ease;
+}
+
+.noise-meter-value{
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.9;
 }
