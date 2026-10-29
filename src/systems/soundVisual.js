@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { dbToMeterFill, dbToVisualRadius } from './catSound.js';
+import { sampleTerrainHeight } from '../core/collision.js';
 
 export class CatSoundVisual {
     constructor(scene) {
@@ -59,7 +60,7 @@ export class CatSoundVisual {
 
         const db = player.soundDecibel ?? 0;
         const pos = player.container.position;
-        const groundY = 0.06;
+        const groundY = sampleTerrainHeight(pos.x, pos.z) + 0.06;
 
         const fill = dbToMeterFill(db);
         this.meterFill.style.width = `${(fill * 100).toFixed(1)}%`;

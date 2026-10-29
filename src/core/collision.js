@@ -1,6 +1,23 @@
 import * as THREE from 'three';
+import { PLAY_RADIUS } from './worldBounds.js';
 
 const _closest = new THREE.Vector3();
+
+let _terrainHeightAt = null;
+
+/** Register (x, z) => height for terrain following. */
+export function setTerrainSampler(fn) {
+    _terrainHeightAt = typeof fn === 'function' ? fn : null;
+}
+
+export function sampleTerrainHeight(x, z, fallback = 0) {
+    if (!_terrainHeightAt) return fallback;
+    return _terrainHeightAt(x, z);
+}
+
+export function applyTerrainHeight(position, footOffset = 0) {
+    position.y = sampleTerrainHeight(position.x, position.z) + footOffset;
+}
 
 /** XZ distance from a point to an axis-aligned box (0 when inside on XZ). */
 export function xzDistanceToBox(point, box) {
@@ -26,10 +43,15 @@ export function computeBushBlend(position, bushes, fadeRadius = 0.55) {
     return THREE.MathUtils.clamp(blend, 0, 1);
 }
 
-export function clampPositionToArena(position, halfExtent = 48, margin = 0.6) {
-    const limit = halfExtent - margin;
-    position.x = THREE.MathUtils.clamp(position.x, -limit, limit);
-    position.z = THREE.MathUtils.clamp(position.z, -limit, limit);
+export function clampPositionToArena(position, radius = PLAY_RADIUS, margin = 0.55, footOffset = 0) {
+    const limit = radius - margin;
+    const dist = Math.hypot(position.x, position.z);
+    if (dist > limit && dist > 1e-6) {
+        const scale = limit / dist;
+        position.x *= scale;
+        position.z *= scale;
+    }
+    applyTerrainHeight(position, footOffset);
 }
 
 /** Push overlapping dynamic spheres apart on XZ. */

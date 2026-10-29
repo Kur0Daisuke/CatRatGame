@@ -1,15 +1,24 @@
 import * as THREE from 'three';
-import { setupScene } from './sceneSetup.js';
-import { Player } from './player.js';
-import { Rat } from './rat.js';
-import { loadEnvironment } from './environment.js';
-import { debugSettings, setWireframesVisible, onWireframesChange } from './debugSettings.js';
-import { PounceSystem } from './pounce.js';
-import { CatSoundVisual } from './soundVisual.js';
+import { setupScene } from './scene/sceneSetup.js';
+import { Player } from './game/player.js';
+import { Rat } from './game/rat.js';
+import { loadWorld } from './world/loadWorld.js';
+import { createTerrain } from './world/terrain.js';
+import { setTerrainSampler, applyTerrainHeight } from './core/collision.js';
+import { debugSettings, setWireframesVisible, onWireframesChange } from './core/debugSettings.js';
+import { PounceSystem } from './systems/pounce.js';
+import { CatSoundVisual } from './systems/soundVisual.js';
+import { StaminaVisual } from './systems/staminaVisual.js';
+import { PuddleWaveSystem } from './systems/puddleWaves.js';
 
 const { scene, camera, renderer, composer, stylizedPass } = setupScene();
 
+const terrain = createTerrain(scene, renderer);
+setTerrainSampler((x, z) => terrain.getHeightAt(x, z));
+
 const player = new Player(scene);
+applyTerrainHeight(player.container.position);
+
 const rats = [];
 const roster = [
     ...Array(8).fill('dumb'),
@@ -19,22 +28,29 @@ const roster = [
 roster.forEach((kind, index) => {
     rats.push(new Rat(scene, kind, index));
 });
+rats.forEach((rat) => {
+    if (rat.ratContainer) applyTerrainHeight(rat.ratContainer.position);
+});
 
-const environment = loadEnvironment(scene);
+const environment = loadWorld(scene, terrain);
 const bushes = environment.bushes || [];
+const puddles = environment.puddles || [];
 
 const look = { yaw: 0, pitch: 0.54 };
 const cameraDistance = 6.6;
 const lookTarget = new THREE.Vector3();
-camera.position.set(15, Math.sin(look.pitch) * cameraDistance, 15 + Math.cos(look.pitch) * cameraDistance);
-camera.lookAt(15, 0.45, 15);
+const spawnY = terrain.getHeightAt(15, 15);
+camera.position.set(15, Math.sin(look.pitch) * cameraDistance + spawnY, 15 + Math.cos(look.pitch) * cameraDistance);
+camera.lookAt(15, spawnY + 0.45, 15);
 
 const pounce = new PounceSystem({ camera, renderer, player, rats });
 const soundVisual = new CatSoundVisual(scene);
+const staminaVisual = new StaminaVisual();
+const puddleWaves = new PuddleWaveSystem(scene, puddles);
 
 const hint = document.createElement('div');
 hint.className = 'hint';
-hint.textContent = 'WASD move · Shift run · Ctrl sneak · E pounce · SPACE skill check · H wireframes';
+hint.textContent = 'WASD move · Shift run (stamina) · Stand in puddles to drink · Ctrl sneak · E pounce · SPACE skill check';
 document.body.appendChild(hint);
 
 const debugPanel = document.createElement('div');
@@ -94,10 +110,10 @@ function animate(time) {
     clock.update(time);
     const delta = Math.min(clock.getDelta(), 0.05);
 
-    player.update(delta, bushes, look.yaw);
-
+    player.update(delta, bushes, look.yaw, puddles);
     soundVisual.update(player, delta);
-
+    staminaVisual.update(player);
+    puddleWaves.update(delta, player, rats);
     rats.forEach((rat) => rat.update(delta));
     pounce.update(delta);
 
@@ -114,7 +130,7 @@ function animate(time) {
         const follow = 1 - Math.exp(-8 * delta);
 
         camera.position.x = THREE.MathUtils.lerp(camera.position.x, desiredX, follow);
-        camera.position.y = THREE.MathUtils.lerp(camera.position.y, Math.max(desiredY, 0.45), follow);
+        camera.position.y = THREE.MathUtils.lerp(camera.position.y, Math.max(desiredY, focus.y + 0.45), follow);
         camera.position.z = THREE.MathUtils.lerp(camera.position.z, desiredZ, follow);
 
         lookTarget.set(focus.x, focus.y + 0.45, focus.z);

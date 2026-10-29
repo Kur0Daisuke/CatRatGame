@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sampleTerrainHeight } from '../core/collision.js';
 
 const POUNCE_RANGE = 2.35;
 const LEAP_DURATION = 0.42;
@@ -154,7 +155,7 @@ export class PounceSystem {
         const len = Math.hypot(dx, dz) || 1;
         return new THREE.Vector3(
             to.x - (dx / len) * 0.55,
-            0,
+            sampleTerrainHeight(to.x - (dx / len) * 0.55, to.z - (dz / len) * 0.55),
             to.z - (dz / len) * 0.55
         );
     }

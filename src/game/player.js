@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { Entity } from './entity.js';
+import { Entity } from '../core/entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ } from './collision.js';
-import { computeCatSourceDecibels } from './catSound.js';
+import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainHeight, sampleTerrainHeight } from '../core/collision.js';
+import { computeCatSourceDecibels } from '../systems/catSound.js';
+import { findPuddleAtPosition } from '../world/puddles.js';
 
 export class Player {
     constructor(scene) {
@@ -52,6 +53,13 @@ export class Player {
         this.targetBushBlend = 0;
         this.isMoving = false;
 
+        this.staminaMax = 100;
+        this.stamina = 100;
+        this.runStaminaDrain = 26;
+        this.runMinStamina = 8;
+        this.drinkRate = 38;
+        this.isDrinking = false;
+
         this.isLocked = false;
         this.leapActive = false;
         this.leapElapsed = 0;
@@ -65,7 +73,7 @@ export class Player {
 
     loadModel() {
         const loader = new GLTFLoader();
-        loader.load("./car.glb", (gltf) => {
+        loader.load("/car.glb", (gltf) => {
             this.carModel = gltf.scene;
             this.container.add(this.carModel);
             this.carModel.traverse((child) => {
@@ -130,7 +138,7 @@ export class Player {
         this.leapDuration = duration;
         this.leapFrom.copy(this.container.position);
         this.leapTo.copy(targetPos);
-        this.leapTo.y = 0;
+        this.leapTo.y = sampleTerrainHeight(this.leapTo.x, this.leapTo.z);
         this.walkDirectionX = 0;
         this.walkDirectionZ = 0;
         this.isMoving = false;
@@ -175,7 +183,7 @@ export class Player {
         }
     }
 
-    update(delta, bushes = [], cameraYaw = 0) {
+    update(delta, bushes = [], cameraYaw = 0, puddles = []) {
         if (!this.aerialSphere || !this.sightSphere || !this.collisionSphere) return;
 
         if (this.leapActive) {
@@ -199,13 +207,28 @@ export class Player {
             this.bushBlend
         );
         this.isMoving = this.walkDirectionX !== 0 || this.walkDirectionZ !== 0;
-        this.isRunning = this.isMoving && this.shiftHeld && !this.ctrlHeld;
+        const wantsRun = this.isMoving && this.shiftHeld && !this.ctrlHeld;
+        const canRun = this.stamina > this.runMinStamina;
+        this.isRunning = wantsRun && canRun;
         this.isSneaking = this.isMoving && this.ctrlHeld && !this.shiftHeld;
         this.speed = this.isRunning
             ? this.runSpeed
             : this.isSneaking
               ? this.sneakSpeed
               : this.walkSpeed;
+
+        if (this.isRunning && !this.isStunned && !this.isRecovering && !this.leapActive) {
+            this.stamina = Math.max(0, this.stamina - this.runStaminaDrain * delta);
+        }
+
+        this.isDrinking = false;
+        if (!this.leapActive && !this.isStunned && puddles.length > 0) {
+            const puddle = findPuddleAtPosition(puddles, bodyCenter.x, bodyCenter.z);
+            if (puddle) {
+                this.stamina = Math.min(this.staminaMax, this.stamina + this.drinkRate * delta);
+                this.isDrinking = true;
+            }
+        }
 
         this.soundTime += delta;
         this.soundDecibel = computeCatSourceDecibels(this, this.soundTime);
@@ -317,5 +340,7 @@ export class Player {
                 rat.ratContainer.position
             );
         }
+
+        applyTerrainHeight(this.container.position);
     }
 }

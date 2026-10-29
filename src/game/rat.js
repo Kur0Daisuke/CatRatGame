@@ -1,15 +1,15 @@
 import * as THREE from 'three';
-import { Entity } from './entity.js';
+import { Entity } from '../core/entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clampPositionToArena, resolveSphereOverlapXZ } from './collision.js';
-import { debugSettings } from './debugSettings.js';
-import { computePerceivedDecibels, canRatHearCat, ALERT_HEARD_DB, PANIC_HEARD_DB, HEARING_THRESHOLD } from './catSound.js';
+import { clampPositionToArena, resolveSphereOverlapXZ, applyTerrainHeight } from '../core/collision.js';
+import { debugSettings } from '../core/debugSettings.js';
+import { computePerceivedDecibels, canRatHearCat, ALERT_HEARD_DB, PANIC_HEARD_DB, HEARING_THRESHOLD } from '../systems/catSound.js';
 import { isPointInVisionCone, createVisionConeHelper } from './ratVision.js';
 
 const RAT_MODELS = {
-    dumb: './models/rat-dumb.glb',
-    scout: './models/rat-scout.glb',
-    pouncer: './models/rat-pouncer.glb'
+    dumb: '/models/rat-dumb.glb',
+    scout: '/models/rat-scout.glb',
+    pouncer: '/models/rat-pouncer.glb'
 };
 
 const PERSONALITY_BY_KIND = {
@@ -507,7 +507,7 @@ export class Rat {
             ratPos.y,
             ratPos.z + away.z * dist
         );
-        clampPositionToArena(this.targetDestination, 48, 1.2);
+        clampPositionToArena(this.targetDestination);
         if (this.debugTargetMesh) {
             this.debugTargetMesh.position.copy(this.targetDestination);
         }
@@ -804,5 +804,7 @@ export class Rat {
             const scale = this.visionRange / this._debugVisionBaseRadius;
             this.debugVisionSphere.scale.setScalar(scale);
         }
+
+        applyTerrainHeight(this.ratContainer.position);
     }
 }
