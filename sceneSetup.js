@@ -6,22 +6,51 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 export function setupScene() {
     const scene = new THREE.Scene();
     
-    // --- SKYBOX SETUP ---
-    const cubeTextureLoader = new THREE.CubeTextureLoader();
-    // Replace these paths with your actual skybox face image paths
-    const skyboxTexture = cubeTextureLoader.load([
-        './skybox/px.jpg', './skybox/nx.jpg',
-        './skybox/py.jpg', './skybox/ny.jpg',
-        './skybox/pz.jpg', './skybox/nz.jpg'
-    ]);
-    scene.background = skyboxTexture;
+    scene.background = new THREE.Color(0xc5d8ee);
+    scene.fog = new THREE.Fog(0xc5d8ee, 32, 78);
+
+    const sky = new THREE.Mesh(
+        new THREE.SphereGeometry(420, 24, 16),
+        new THREE.ShaderMaterial({
+            side: THREE.BackSide,
+            depthWrite: false,
+            fog: false,
+            uniforms: {
+                topColor: { value: new THREE.Color(0x7eb4e6) },
+                horizonColor: { value: new THREE.Color(0xe7f0dc) }
+            },
+            vertexShader: `
+                varying vec3 vDir;
+                void main() {
+                    vDir = position;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vDir;
+                uniform vec3 topColor;
+                uniform vec3 horizonColor;
+                void main() {
+                    float h = normalize(vDir).y;
+                    float t = smoothstep(-0.02, 0.55, h);
+                    gl_FragColor = vec4(mix(horizonColor, topColor, t), 1.0);
+                }
+            `
+        })
+    );
+    scene.add(sky);
 
     const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 2, 3);
+    camera.position.set(0, 3.4, 5.6);
 
-    const renderer = new THREE.WebGLRenderer();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
 
     const composer = new EffectComposer(renderer);
@@ -49,8 +78,8 @@ export function setupScene() {
                 vec4 texel = texture2D(tDiffuse, vUv);
                 vec3 color = texel.rgb; // Preserves original color without extra tinting
                 
-                // Apply dark vignette edges ONLY when inBush is true
-                if (inBush > 0.5) {
+                // Apply dark vignette edges when hiding in bushes (0 = open, 1 = fully concealed)
+                if (inBush > 0.001) {
                     vec2 uv = vUv * (1.0 - vUv.yx);
                     float vignette = uv.x * uv.y * 12.0;
                     vignette = pow(vignette, 0.2);
@@ -65,35 +94,45 @@ export function setupScene() {
     const stylizedPass = new ShaderPass(StylizedShader);
     composer.addPass(stylizedPass);
 
-    // --- ORIGINAL LIGHTING INTENSITIES ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 4);
-    scene.add(ambientLight);
+    const skyFill = new THREE.HemisphereLight(0xfff4e0, 0x5d7a48, 0.95);
+    scene.add(skyFill);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 3);
-    sunLight.position.set(10, 20, 10);
+    const sunLight = new THREE.DirectionalLight(0xfff1d0, 2.7);
+    sunLight.position.set(24, 36, 14);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.left = -100;
-    sunLight.shadow.camera.right = 100;
-    sunLight.shadow.camera.top = 100;
-    sunLight.shadow.camera.bottom = -100;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 100;
-    sunLight.shadow.bias = -0.0005;
+    sunLight.shadow.camera.left = -40;
+    sunLight.shadow.camera.right = 40;
+    sunLight.shadow.camera.top = 40;
+    sunLight.shadow.camera.bottom = -40;
+    sunLight.shadow.camera.near = 1;
+    sunLight.shadow.camera.far = 90;
+    sunLight.shadow.bias = -0.0003;
+    sunLight.shadow.normalBias = 0.02;
+    sunLight.shadow.radius = 2;
     scene.add(sunLight);
+    scene.add(sunLight.target);
+
+    const fillLight = new THREE.DirectionalLight(0xc5d4f2, 0.45);
+    fillLight.position.set(-16, 10, -12);
+    scene.add(fillLight);
 
     const textureLoader = new THREE.TextureLoader();
     const myTexture = textureLoader.load('./grass.jpg', () => {
+        myTexture.colorSpace = THREE.SRGBColorSpace;
         myTexture.wrapS = THREE.RepeatWrapping;
         myTexture.wrapT = THREE.RepeatWrapping;
         myTexture.repeat.set(100, 100);
+        myTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     });
+    myTexture.colorSpace = THREE.SRGBColorSpace;
 
     const material = new THREE.MeshStandardMaterial({ 
-        map: myTexture, 
-        roughness: 0.8, 
-        metalness: 0.1 
+        map: myTexture,
+        color: 0xffffff,
+        roughness: 1,
+        metalness: 0
     });
     const flatObject = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), material);
     flatObject.rotation.x = -Math.PI / 2;

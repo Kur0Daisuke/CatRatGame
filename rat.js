@@ -1,10 +1,25 @@
 import * as THREE from 'three';
 import { Entity } from './entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clampPositionToArena, resolveSphereOverlapXZ } from './collision.js';
+import { debugSettings } from './debugSettings.js';
+
+const RAT_MODELS = {
+    dumb: './models/rat-dumb.glb',
+    scout: './models/rat-scout.glb',
+    pouncer: './models/rat-pouncer.glb'
+};
+
+const PERSONALITY_BY_KIND = {
+    dumb: 'STRAIGHT_AWAY',
+    scout: 'ERRATIC',
+    pouncer: 'jumper'
+};
 
 export class Rat {
-    constructor(scene) {
+    constructor(scene, kind = 'dumb', index = 0) {
         this.scene = scene;
+        this.kind = RAT_MODELS[kind] ? kind : 'dumb';
         this.ratModel = null;
 
         this.visionSphere = new THREE.Sphere();
@@ -14,6 +29,7 @@ export class Rat {
         const debugVisionGeo = new THREE.SphereGeometry(2.5, 16, 16);
         const debugVisionMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true, transparent: true, opacity: 0.3 });
         this.debugVisionSphere = new THREE.Mesh(debugVisionGeo, debugVisionMat);
+        this.debugVisionSphere.visible = debugSettings.showWireframes;
         this.scene.add(this.debugVisionSphere);
 
         this.guessedPosition = new THREE.Vector3(0, 0, 0);
@@ -22,6 +38,7 @@ export class Rat {
         const debugGuessGeo = new THREE.SphereGeometry(0.3, 8, 8);
         const debugGuessMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
         this.guessMesh = new THREE.Mesh(debugGuessGeo, debugGuessMat);
+        this.guessMesh.visible = debugSettings.showWireframes;
         this.scene.add(this.guessMesh);
 
         // Idle & Wandering State Variables
@@ -34,12 +51,13 @@ export class Rat {
         const debugTargetGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
         const debugTargetMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
         this.debugTargetMesh = new THREE.Mesh(debugTargetGeo, debugTargetMat);
+        this.debugTargetMesh.visible = debugSettings.showWireframes;
         this.scene.add(this.debugTargetMesh);
 
         this.ratSpeed = 1.0; 
 
         const personalityTypes = ['STRAIGHT_AWAY', 'jumper', 'ERRATIC', 'STARE_DOWN'];
-        this.personality = personalityTypes[Math.floor(Math.random() * personalityTypes.length)];
+        this.personality = PERSONALITY_BY_KIND[this.kind] || personalityTypes[Math.floor(Math.random() * personalityTypes.length)];
 
         this.stayInGroup = true;         
         this.groupRadius = 6.0;          
@@ -69,7 +87,13 @@ export class Rat {
 
         this._worldPosition = new THREE.Vector3();
         this.ratContainer = new THREE.Group();
-        this.ratContainer.position.set(0, 0, 0);
+        const spawnAngle = index * 2.39996 + (index % 3) * 0.7;
+        const spawnRadius = 10 + (index % 6) * 2.8;
+        this.ratContainer.position.set(
+            15 + Math.cos(spawnAngle) * spawnRadius,
+            0,
+            15 + Math.sin(spawnAngle) * spawnRadius
+        );
 
         this.scene.add(this.ratContainer);
         this.targetQuaternion = new THREE.Quaternion();
@@ -82,7 +106,13 @@ export class Rat {
         this.isEscaping = false;
         this.currentEscapeDir = new THREE.Vector3();
         this.encounterTime = 0;
-        this.hasStunnedCat = false; 
+        this.hasStunnedCat = false;
+
+        this.isPinned = false;
+        this.isConsumed = false;
+        this.flipProgress = 0;
+        this.isFlipping = false;
+        this.consumeProgress = 0;
 
         this.loadModel();
     }
@@ -125,7 +155,8 @@ export class Rat {
 
     loadModel() {
         const loader = new GLTFLoader();
-        loader.load("./rat.glb", (gltf) => {
+        const modelPath = RAT_MODELS[this.kind];
+        loader.load(modelPath, (gltf) => {
             this.ratModel = gltf.scene;
             this.ratModel.position.set(0, 0.1, 0); 
             this.ratModel.rotation.y = Math.PI;
@@ -138,10 +169,107 @@ export class Rat {
             });
 
             this.visionSphere.radius = 4.0; 
-            this.collisionSphere.radius = 0.3;
+            this.collisionSphere.radius = 0.35;
+            this.visionSphere.center.copy(this.ratContainer.position);
+            this.collisionSphere.center.copy(this.ratContainer.position);
             this.ratContainer.add(this.ratModel);
             Entity.appendEntity("entity", this, 2);
-        }, undefined, (err) => console.log(err));
+        }, undefined, (err) => console.error(`Failed to load rat model (${this.kind}):`, err));
+    }
+
+    setDebugVisible(visible) {
+        if (this.debugVisionSphere) this.debugVisionSphere.visible = visible;
+        if (this.guessMesh) this.guessMesh.visible = visible;
+        if (this.debugTargetMesh) this.debugTargetMesh.visible = visible;
+    }
+
+    canBePounced() {
+        return Boolean(this.ratModel && this.ratContainer && !this.isPinned && !this.isConsumed);
+    }
+
+    hideChat() {
+        if (this.chatTimeout) {
+            clearTimeout(this.chatTimeout);
+            this.chatTimeout = null;
+        }
+        if (this.chatBubbleSprite) {
+            this.ratContainer.remove(this.chatBubbleSprite);
+            this.chatBubbleSprite = null;
+        }
+        this.isSpeaking = false;
+    }
+
+    beginPin() {
+        this.isPinned = true;
+        this.isEscaping = false;
+        this.state = 'PINNED';
+        this.flipProgress = 0;
+        this.isFlipping = false;
+        this.hasStunnedCat = true;
+        this.hideChat();
+        if (this.ratModel) {
+            this.ratModel.position.y = 0.1;
+        }
+    }
+
+    playFlip() {
+        this.isFlipping = true;
+        this.flipProgress = 0;
+    }
+
+    updateFlip(delta) {
+        if (!this.ratModel || !this.isPinned) return;
+        if (this.isFlipping) {
+            this.flipProgress = Math.min(1, this.flipProgress + delta * 4.2);
+        }
+        const t = this.flipProgress;
+        this.ratModel.rotation.x = t * Math.PI;
+        const lift = Math.sin(t * Math.PI) * 0.28;
+        this.ratModel.position.y = 0.12 + t * 0.06 + lift;
+    }
+
+    releaseAndFlee(catPos) {
+        this.isPinned = false;
+        this.isFlipping = false;
+        this.flipProgress = 0;
+        this.isEscaping = false;
+        if (this.ratModel) {
+            this.ratModel.rotation.x = 0;
+            this.ratModel.position.y = 0.1;
+        }
+        this.triggerEscape(catPos);
+    }
+
+    beginConsume() {
+        this.isConsumed = true;
+        this.consumeProgress = 0;
+        this.hideChat();
+    }
+
+    updateConsume(delta) {
+        this.consumeProgress += delta / 0.45;
+        const t = Math.min(1, this.consumeProgress);
+        const scale = Math.max(0.01, 1 - t);
+        this.ratContainer.scale.setScalar(scale);
+        this.ratContainer.position.y = t * 0.35;
+        if (this.ratModel) {
+            this.ratModel.rotation.x = Math.PI;
+        }
+        return t >= 1;
+    }
+
+    dispose() {
+        this.isConsumed = true;
+        this.hideChat();
+        if (this.chatTimeout) clearTimeout(this.chatTimeout);
+        if (this.debugVisionSphere) this.scene.remove(this.debugVisionSphere);
+        if (this.guessMesh) this.scene.remove(this.guessMesh);
+        if (this.debugTargetMesh) this.scene.remove(this.debugTargetMesh);
+        this.scene.remove(this.ratContainer);
+        for (const texture of Object.values(this.prerenderedTextures)) {
+            texture.dispose?.();
+        }
+        Entity.removeEntity(this);
     }
 
     updateGuessPosition(catCenter, ratCenter) {
@@ -285,7 +413,18 @@ export class Rat {
     }
 
     update(deltaTime) {
-        if (!this.ratModel || !Entity.player) return;
+        if (!this.ratModel || !Entity.player || this.isConsumed) return;
+
+        if (this.isPinned) {
+            this.ratModel.getWorldPosition(this._worldPosition);
+            this.visionSphere.center.copy(this._worldPosition);
+            this.collisionSphere.center.set(this._worldPosition.x, this.ratContainer.position.y + 0.2, this._worldPosition.z);
+            this.updateFlip(deltaTime);
+            if (this.debugVisionSphere) {
+                this.debugVisionSphere.position.copy(this.visionSphere.center);
+            }
+            return;
+        }
 
         this.groupUpdateTimer += deltaTime;
         if (this.groupUpdateTimer >= 0.3) {
@@ -294,7 +433,7 @@ export class Rat {
             const allEntities = Entity.getEntitiesByType("entity"); 
             if (allEntities) {
                 for (const otherEntity of allEntities) {
-                    if (otherEntity !== this && otherEntity.ratContainer) {
+                    if (otherEntity !== this && otherEntity.ratContainer && !otherEntity.isConsumed && !otherEntity.isPinned) {
                         const dist = this.ratContainer.position.distanceTo(otherEntity.ratContainer.position);
                         if (dist <= this.groupRadius) {
                             this.nearbyRats.push(otherEntity);
@@ -305,13 +444,14 @@ export class Rat {
         }
 
         const playerEntity = Entity.player.entity;
-        const catCenter = playerEntity.aerialSphere.center;
-        const ratCenter = this.visionSphere.center;
         const ratPos = this.ratContainer.position;
 
-        this.collisionSphere.center.copy(ratPos);
+        this.ratModel.getWorldPosition(this._worldPosition);
+        this.visionSphere.center.copy(this._worldPosition);
+        this.collisionSphere.center.set(this._worldPosition.x, ratPos.y + 0.2, this._worldPosition.z);
 
-        const playerHiddenInBush = playerEntity.hiddenInBush;
+        const catCenter = playerEntity.aerialSphere.center;
+        const ratCenter = this.visionSphere.center;
         const playerMoving = playerEntity.isMoving;
 
         if (!this.isEscaping) {
@@ -327,7 +467,7 @@ export class Rat {
 
             // Hearing check: Rats hear louder sounds when nearer, quieter/none when far
             let canHearCat = inVisionRange && (perceivedDecibels >= hearingThreshold);
-            let canSeeCat = inVisionRange && (!playerHiddenInBush || playerMoving);
+            let canSeeCat = inVisionRange && ((1 - playerEntity.bushBlend) > 0.35 || playerMoving);
 
             if (canHearCat) {
                 // Sound heard: guess position and turn toward the noise source
@@ -388,6 +528,7 @@ export class Rat {
                         dirToDest.normalize();
                         this.ratContainer.position.addScaledVector(dirToDest, this.ratSpeed * deltaTime);
                         this.rotateTowards(this.targetDestination.clone());
+                        clampPositionToArena(this.ratContainer.position);
                     }
                 }
             }
@@ -400,6 +541,7 @@ export class Rat {
                 if (this.escapeTimer < this.escapeDelay) {
                     const chargeSpeed = 4.2;
                     this.ratContainer.position.addScaledVector(this.currentEscapeDir, chargeSpeed * deltaTime);
+                    clampPositionToArena(this.ratContainer.position);
 
                     const jumpProgress = this.escapeTimer / this.escapeDelay;
                     const highJumpHeight = Math.sin(jumpProgress * Math.PI) * 2.8;
@@ -420,12 +562,14 @@ export class Rat {
                     }
                     const escapeSpeed = 3.8;
                     this.ratContainer.position.addScaledVector(this.currentEscapeDir, escapeSpeed * deltaTime);
+                    clampPositionToArena(this.ratContainer.position);
                     this.ratModel.position.y = 0.1;
                 }
             } else {
                 if (this.escapeTimer >= this.escapeDelay) {
                     const escapeSpeed = Math.min(3.5 + (this.encounterTime * 0.2), 5.2); 
                     this.ratContainer.position.addScaledVector(this.currentEscapeDir, escapeSpeed * deltaTime);
+                    clampPositionToArena(this.ratContainer.position);
                     this.ratModel.position.y = 0.1; 
                 } else {
                     const jumpProgress = this.escapeTimer / this.escapeDelay;
@@ -454,8 +598,17 @@ export class Rat {
             }
         }
 
-        this.ratModel.getWorldPosition(this._worldPosition);
-        this.visionSphere.center.copy(this._worldPosition);
+        for (const otherRat of this.nearbyRats) {
+            if (!otherRat.collisionSphere || otherRat.isPinned || otherRat.isConsumed) continue;
+            resolveSphereOverlapXZ(
+                this.ratContainer.position,
+                this.collisionSphere.radius,
+                otherRat.ratContainer.position,
+                otherRat.collisionSphere.radius,
+                this.ratContainer.position,
+                otherRat.ratContainer.position
+            );
+        }
 
         if (this.debugVisionSphere) {
             this.debugVisionSphere.position.copy(this.visionSphere.center);

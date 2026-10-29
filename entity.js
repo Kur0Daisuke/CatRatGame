@@ -20,4 +20,9 @@ export class Entity{
         }
         return [];
     }
+
+    static removeEntity(entity) {
+        const index = Entity.entityList.findIndex((item) => item.entity === entity);
+        if (index >= 0) Entity.entityList.splice(index, 1);
+    }
 }

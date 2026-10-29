@@ -42,6 +42,8 @@ export function loadEnvironment(scene) {
             scene.add(bushInstance);
 
             const box = new THREE.Box3().setFromObject(bushInstance);
+            box.min.y = -0.05;
+            box.max.y = 2.5;
             
             bushes.push({
                 mesh: bushInstance,

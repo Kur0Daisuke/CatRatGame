@@ -3,7 +3,9 @@
     padding: 0;
     box-sizing: border-box;
 }
-body{
+html, body{
+    width: 100%;
+    height: 100%;
     overflow: hidden;
 }
 
@@ -21,4 +23,207 @@ body{
     width: fit-content;
     padding: 20px;
     border: 3px solid grey;
+}
+
+.hint{
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    color: #f7f3ea;
+    font: 14px/1.4 system-ui, sans-serif;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    opacity: 0.9;
+    transition: opacity 0.3s ease;
+}
+
+.debug-panel{
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(18, 22, 28, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #eef2f7;
+    font: 13px/1.35 system-ui, sans-serif;
+    backdrop-filter: blur(6px);
+}
+
+.debug-toggle{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.debug-toggle input{
+    width: 15px;
+    height: 15px;
+    accent-color: #7eb4e6;
+}
+
+.pounce-score{
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 12;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(18, 22, 28, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #eef2f7;
+    font: 600 14px/1.3 system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+}
+
+.pounce-score.pulse{
+    animation: pounce-score-pulse 0.45s ease;
+}
+
+@keyframes pounce-score-pulse{
+    0%{ transform: scale(1); }
+    40%{ transform: scale(1.08); color: #f6d36b; }
+    100%{ transform: scale(1); }
+}
+
+.pounce-prompt{
+    position: fixed;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    z-index: 12;
+}
+
+.pounce-prompt-key{
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(18, 22, 28, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+    color: #f7f3ea;
+    font: 700 16px/1 system-ui, sans-serif;
+    animation: pounce-prompt-bob 1.1s ease-in-out infinite;
+}
+
+@keyframes pounce-prompt-bob{
+    0%, 100%{ transform: translateY(0); }
+    50%{ transform: translateY(-4px); }
+}
+
+.pounce-qte-overlay{
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 36vh;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
+    cursor: none;
+}
+
+.pounce-cursor{
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #f7f3ea;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 10px rgba(246, 211, 107, 0.45);
+    pointer-events: none;
+    z-index: 8;
+}
+
+.pounce-qte-overlay[hidden],
+.pounce-prompt[hidden],
+.pounce-toast[hidden]{
+    display: none !important;
+}
+
+.pounce-qte{
+    width: min(520px, 72vw);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.pounce-qte-label{
+    color: #f7f3ea;
+    text-align: center;
+    font: 600 14px/1.3 system-ui, sans-serif;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+    letter-spacing: 0.03em;
+}
+
+.pounce-qte-track{
+    position: relative;
+    height: 28px;
+    border-radius: 999px;
+    background: rgba(18, 22, 28, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.pounce-qte-zone{
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 0;
+    width: 16%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ffe58a, #f0b429);
+    box-shadow: 0 0 16px rgba(240, 180, 41, 0.65);
+    cursor: pointer;
+}
+
+.pounce-qte-timer{
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(18, 22, 28, 0.55);
+    overflow: hidden;
+}
+
+.pounce-qte-timer-fill{
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    background: #e8d5a3;
+}
+
+.pounce-toast{
+    position: fixed;
+    left: 50%;
+    top: 16%;
+    transform: translateX(-50%);
+    z-index: 21;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font: 700 18px/1.2 system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.pounce-toast.success{
+    color: #f6e7a6;
+    background: rgba(18, 22, 28, 0.78);
+    border: 1px solid rgba(240, 180, 41, 0.45);
+}
+
+.pounce-toast.fail{
+    color: #f3d4c8;
+    background: rgba(18, 22, 28, 0.78);
+    border: 1px solid rgba(220, 120, 90, 0.45);
 }

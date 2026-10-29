@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Entity } from './entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ } from './collision.js';
 
 export class Player {
     constructor(scene) {
@@ -36,7 +37,16 @@ export class Player {
 
         // Bush Stealth & Sound Flags
         this.hiddenInBush = false;
+        this.bushBlend = 0;
+        this.targetBushBlend = 0;
         this.isMoving = false;
+
+        this.isLocked = false;
+        this.leapActive = false;
+        this.leapElapsed = 0;
+        this.leapDuration = 0.42;
+        this.leapFrom = new THREE.Vector3();
+        this.leapTo = new THREE.Vector3();
 
         this.initControls();
         this.loadModel();
@@ -55,18 +65,7 @@ export class Player {
             this.targetQuaternion.copy(this.container.quaternion);
 
             this.aerialSphere.radius = 4;
-            this.collisionSphere.radius = 0.05;
-
-            // --- DEBUG WIREFRAMES FOR PLAYER ---
-            const debugAerialGeo = new THREE.SphereGeometry(this.aerialSphere.radius, 16, 16);
-            const debugAerialMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
-            const debugAerialMesh = new THREE.Mesh(debugAerialGeo, debugAerialMat);
-            this.carModel.add(debugAerialMesh);
-
-            const debugCollisionGeo = new THREE.SphereGeometry(this.collisionSphere.radius, 8, 8);
-            const debugCollisionMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-            const debugCollisionMesh = new THREE.Mesh(debugCollisionGeo, debugCollisionMat);
-            this.carModel.add(debugCollisionMesh);
+            this.collisionSphere.radius = 0.5;
 
             Entity.appendEntity("player", this, 1);
         }, undefined, (err) => console.log(err));
@@ -74,7 +73,7 @@ export class Player {
 
     initControls() {
         window.addEventListener("keydown", (e) => {
-            if (this.isStunned || this.isRecovering) return;
+            if (this.isStunned || this.isRecovering || this.isLocked) return;
             switch(e.key) {
                 case "d": this.walkDirectionX = 1; break;
                 case "a": this.walkDirectionX = -1; break;
@@ -94,6 +93,7 @@ export class Player {
     }
 
     stun(duration = 1.5) {
+        if (this.isLocked) return;
         if (!this.isStunned && !this.isRecovering) {
             this.isStunned = true;
             this.stunTimer = duration;
@@ -103,25 +103,73 @@ export class Player {
         }
     }
 
-    isInBush(bushes) {
-        if (!bushes || bushes.length === 0) return false;
-        const playerPos = this.container.position;
-        
-        for (const bush of bushes) {
-            if (bush.box && bush.box.containsPoint(playerPos)) {
-                return true;
-            }
-        }
-        return false;
+    beginLeap(targetPos, duration = 0.42) {
+        this.isLocked = true;
+        this.leapActive = true;
+        this.leapElapsed = 0;
+        this.leapDuration = duration;
+        this.leapFrom.copy(this.container.position);
+        this.leapTo.copy(targetPos);
+        this.leapTo.y = 0;
+        this.walkDirectionX = 0;
+        this.walkDirectionZ = 0;
+        this.isMoving = false;
     }
 
-    update(delta, bushes = []) {
+    endPounce() {
+        this.isLocked = false;
+        this.leapActive = false;
+        if (this.carModel && !this.isStunned && !this.isRecovering) {
+            this.carModel.position.y = 0;
+            this.carModel.rotation.x = 0;
+        }
+    }
+
+    updateLeap(delta) {
+        this.leapElapsed += delta;
+        const t = Math.min(this.leapElapsed / this.leapDuration, 1);
+        const eased = t * t * (3 - 2 * t);
+        this.container.position.lerpVectors(this.leapFrom, this.leapTo, eased);
+        clampPositionToArena(this.container.position);
+
+        const dx = this.leapTo.x - this.leapFrom.x;
+        const dz = this.leapTo.z - this.leapFrom.z;
+        if (dx * dx + dz * dz > 1e-6) {
+            this.tempMatrix.lookAt(
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(-dx, 0, -dz),
+                new THREE.Vector3(0, 1, 0)
+            );
+            this.targetQuaternion.setFromRotationMatrix(this.tempMatrix);
+            this.container.quaternion.slerp(this.targetQuaternion, 0.35);
+        }
+
+        if (this.carModel) {
+            this.carModel.position.y = Math.sin(t * Math.PI) * 1.15;
+            this.carModel.rotation.z = 0;
+        }
+
+        if (t >= 1) {
+            this.leapActive = false;
+            if (this.carModel) this.carModel.position.y = 0;
+        }
+    }
+
+    update(delta, bushes = [], cameraYaw = 0) {
         if(!this.aerialSphere || !this.collisionSphere) return;
 
-        this.aerialSphere.center.copy(this.container.position);
-        this.collisionSphere.center.copy(this.container.position);
+        if (this.leapActive) {
+            this.updateLeap(delta);
+        }
 
-        this.hiddenInBush = this.isInBush(bushes);
+        const bodyCenter = this.container.position;
+        this.aerialSphere.center.set(bodyCenter.x, bodyCenter.y + 0.35, bodyCenter.z);
+        this.collisionSphere.center.set(bodyCenter.x, bodyCenter.y + 0.25, bodyCenter.z);
+
+        this.targetBushBlend = computeBushBlend(bodyCenter, bushes);
+        const bushLerp = 1 - Math.exp(-10 * delta);
+        this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, this.targetBushBlend, bushLerp);
+        this.hiddenInBush = this.bushBlend > 0.52;
         this.isMoving = this.walkDirectionX !== 0 || this.walkDirectionZ !== 0;
 
         if (this.isMoving) {
@@ -131,12 +179,17 @@ export class Player {
         }
 
         if (this.carModel) {
+            const stealthOpacity = THREE.MathUtils.lerp(1.0, 0.32, this.bushBlend);
             this.carModel.traverse((child) => {
-                if (child.isMesh && !child.geometry.type.includes('Sphere')) { // Keep debug meshes solid/unaffected
-                    child.material.transparent = true;
-                    child.material.opacity = this.hiddenInBush ? 0.3 : 1.0;
+                if (child.isMesh && !child.geometry.type.includes('Sphere')) {
+                    child.material.transparent = stealthOpacity < 0.99;
+                    child.material.opacity = stealthOpacity;
                 }
             });
+        }
+
+        if (this.leapActive || this.isLocked) {
+            return;
         }
 
         if (this.isStunned) {
@@ -178,11 +231,25 @@ export class Player {
             return; 
         }
 
-        let moveDirection = new THREE.Vector3(-this.walkDirectionX, 0, -this.walkDirectionZ);
+        const forwardX = -Math.sin(cameraYaw);
+        const forwardZ = -Math.cos(cameraYaw);
+        const rightX = -forwardZ;
+        const rightZ = forwardX;
+        const inputForward = -this.walkDirectionZ;
+        const inputRight = this.walkDirectionX;
+        let moveX = forwardX * inputForward + rightX * inputRight;
+        let moveZ = forwardZ * inputForward + rightZ * inputRight;
+        const moveLen = Math.hypot(moveX, moveZ);
+        if (moveLen > 0) {
+            moveX /= moveLen;
+            moveZ /= moveLen;
+        }
+
+        let moveDirection = new THREE.Vector3(moveX, 0, moveZ);
         
         if (moveDirection.lengthSq() > 0) {
             moveDirection.normalize();
-            this.tempMatrix.lookAt(new THREE.Vector3(0, 0, 0), moveDirection, new THREE.Vector3(0, 1, 0));
+            this.tempMatrix.lookAt(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-moveX, 0, -moveZ), new THREE.Vector3(0, 1, 0));
             this.targetQuaternion.setFromRotationMatrix(this.tempMatrix);
 
             this.translationX += 0.04;
@@ -211,7 +278,22 @@ export class Player {
             }
         }
 
-        this.container.position.x += this.walkDirectionX * this.speed * delta;
-        this.container.position.z += this.walkDirectionZ * this.speed * delta;
+        this.container.position.x += moveX * this.speed * delta;
+        this.container.position.z += moveZ * this.speed * delta;
+        clampPositionToArena(this.container.position);
+
+        const rats = Entity.getEntitiesByType('entity');
+        for (const rat of rats) {
+            if (!rat.collisionSphere || !rat.ratContainer) continue;
+            if (rat.isPinned || rat.isConsumed) continue;
+            resolveSphereOverlapXZ(
+                this.container.position,
+                this.collisionSphere.radius,
+                rat.ratContainer.position,
+                rat.collisionSphere.radius,
+                this.container.position,
+                rat.ratContainer.position
+            );
+        }
     }
 }
