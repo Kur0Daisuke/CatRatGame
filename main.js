@@ -7,7 +7,11 @@ import { loadEnvironment } from './environment.js';
 const { scene, camera, renderer } = setupScene();
 
 const player = new Player(scene);
-const rat = new Rat(scene);
+const rat = [];
+
+for (let i = 0; i < 20; i++) {
+    rat.push(new Rat(scene));
+}
 const environment = loadEnvironment(scene);
 
 const clock = new THREE.Timer(); 
@@ -15,9 +19,9 @@ const clock = new THREE.Timer();
 function animate(time) {
     const delta = clock.getDelta();
 
-    player.update();
+    player.update(delta);
 
-    rat.update(delta);
+    rat.forEach(e => e.update(delta))
 
     if (player.container) {
         camera.position.x = THREE.MathUtils.lerp(camera.position.x, player.container.position.x, 0.1);

@@ -6,11 +6,14 @@ export class Player {
     constructor(scene) {
         this.scene = scene;
         this.container = new THREE.Group();
-        this.container.position.set(0, 0, 0);
+        
+        // --- DEBUG SPAWN: Moved player further away from rats at (0,0,0) ---
+        this.container.position.set(15, 0, 15);
+        
         this.scene.add(this.container);
 
         this.carModel = null;
-        this.speed = 15;
+        this.speed = 4;
         this.walkDirectionX = 0;
         this.walkDirectionZ = 0;
 
@@ -42,16 +45,16 @@ export class Player {
             });
             this.targetQuaternion.copy(this.container.quaternion);
 
-            this.aerialSphere.radius = 2;
+            this.aerialSphere.radius = 4;
             this.collisionSphere.radius = 0.05;
-            const debugGeo = new THREE.SphereGeometry(2, 16, 16);
-            const debugMat = new THREE.MeshBasicMaterial({ 
-                color: 0xff0000, 
-                wireframe: true 
-            });
-            const debugAerialSphere = new THREE.Mesh(debugGeo, debugMat);
+            // const debugGeo = new THREE.SphereGeometry(4, 16, 16);
+            // const debugMat = new THREE.MeshBasicMaterial({ 
+            //     color: 0xff0000, 
+            //     wireframe: true 
+            // });
+            // const debugAerialSphere = new THREE.Mesh(debugGeo, debugMat);
             
-            this.carModel.add(debugAerialSphere);
+            // this.carModel.add(debugAerialSphere);
 
             Entity.appendEntity("player", this, 1);
         }, undefined, (err) => console.log(err));
@@ -77,7 +80,7 @@ export class Player {
         });
     }
 
-    update() {
+    update(delta) {
         if(!this.aerialSphere || !this.collisionSphere) return
         this.aerialSphere.center.copy(this.container.position);
         this.collisionSphere.center.copy(this.container.position);
@@ -110,17 +113,17 @@ export class Player {
 
         // Wobble and bounce effects
         if (this.carModel) {
-            this.carModel.rotation.z = Math.sin(this.translationX) * 0.05;
+            this.carModel.rotation.z = Math.sin(this.translationX) * 2 * delta;
 
             if (!this.stoppedMoving && moveDirection.lengthSq() === 0) {
                 this.carModel.position.y = 0;
             } else {
-                this.carModel.position.y = Math.abs(Math.sin(this.translationY * 0.8)) * 0.09;
+                this.carModel.position.y = Math.abs(Math.sin(this.translationY * 0.8)) * 2 * delta;
             }
         }
 
         // Position movement
-        this.container.position.x += this.walkDirectionX * this.speed * 0.001;
-        this.container.position.z += this.walkDirectionZ * this.speed * 0.001;
+        this.container.position.x += this.walkDirectionX * this.speed * delta;
+        this.container.position.z += this.walkDirectionZ * this.speed * delta;
     }
 }
