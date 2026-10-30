@@ -5,6 +5,13 @@ import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTe
 import { computeCatSourceDecibels } from '../systems/catSound.js';
 import { findPuddleAtPosition } from '../world/puddles.js';
 
+export const CAT_MODELS = [
+    { id: 'original', label: 'Original', url: '/car.glb' },
+    { id: 'orange', label: 'Orange', url: '/models/cat-orange.glb' },
+    { id: 'white', label: 'White', url: '/models/cat-white.glb' },
+    { id: 'blue', label: 'Blue', url: '/models/cat-blue.glb' }
+];
+
 export class Player {
     constructor(scene) {
         this.scene = scene;
@@ -14,6 +21,10 @@ export class Player {
         this.scene.add(this.container);
 
         this.carModel = null;
+        this.catModelId = 'original';
+        this.modelCache = new Map();
+        this.modelRequest = 0;
+        this.controlsBlocked = false;
         this.walkSpeed = 2;
         this.runSpeed = 4.85;
         this.sneakSpeed = 1.15;
@@ -72,31 +83,58 @@ export class Player {
     }
 
     loadModel() {
-        const loader = new GLTFLoader();
-        loader.load("/car.glb", (gltf) => {
-            this.carModel = gltf.scene;
-            this.container.add(this.carModel);
-            this.carModel.traverse((child) => {
-                if (child.isMesh) {
+        this.aerialSphere.radius = this.baseAerialRadius;
+        this.sightSphere.radius = this.baseAerialRadius;
+        this.collisionSphere.radius = 0.5;
+        Entity.appendEntity('player', this, 1);
+        this.setCatModel('original').catch((error) => console.error('Could not load cat:', error));
+    }
+
+    async setCatModel(id) {
+        const variant = CAT_MODELS.find((model) => model.id === id);
+        if (!variant) throw new Error(`Unknown cat model: ${id}`);
+        const request = ++this.modelRequest;
+        if (!this.modelCache.has(id)) {
+            const pending = new GLTFLoader().loadAsync(variant.url).then(({ scene }) => {
+                scene.traverse((child) => {
+                    if (!child.isMesh) return;
                     child.castShadow = true;
-                    if (child.material) {
-                        child.material.transparent = false;
-                        child.material.opacity = 1;
-                    }
-                }
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.filter(Boolean).forEach((material) => {
+                        material.transparent = false;
+                        material.opacity = 1;
+                    });
+                });
+                return scene;
+            }).catch((error) => {
+                this.modelCache.delete(id);
+                throw error;
             });
-            this.targetQuaternion.copy(this.container.quaternion);
+            this.modelCache.set(id, pending);
+        }
+        const model = await this.modelCache.get(id);
+        if (request !== this.modelRequest) return;
+        if (this.carModel) {
+            model.position.copy(this.carModel.position);
+            model.quaternion.copy(this.carModel.quaternion);
+            this.container.remove(this.carModel);
+        }
+        this.carModel = model;
+        this.catModelId = id;
+        this.container.add(model);
+    }
 
-            this.aerialSphere.radius = this.baseAerialRadius;
-            this.sightSphere.radius = this.baseAerialRadius;
-            this.collisionSphere.radius = 0.5;
-
-            Entity.appendEntity("player", this, 1);
-        }, undefined, (err) => console.log(err));
+    setControlsBlocked(blocked) {
+        this.controlsBlocked = blocked;
+        this.walkDirectionX = 0;
+        this.walkDirectionZ = 0;
+        this.shiftHeld = false;
+        this.ctrlHeld = false;
     }
 
     initControls() {
         window.addEventListener("keydown", (e) => {
+            if (this.controlsBlocked) return;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftHeld = true;
             if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.ctrlHeld = true;
             if (this.isStunned || this.isRecovering || this.isLocked) return;

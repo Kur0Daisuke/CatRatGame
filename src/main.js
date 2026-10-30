@@ -5,7 +5,8 @@ import { Rat } from './game/rat.js';
 import { loadWorld } from './world/loadWorld.js';
 import { createTerrain } from './world/terrain.js';
 import { setTerrainSampler, applyTerrainHeight } from './core/collision.js';
-import { debugSettings, setWireframesVisible, onWireframesChange } from './core/debugSettings.js';
+import { debugSettings, setWireframesVisible } from './core/debugSettings.js';
+import { createSettings } from './ui/settings.js';
 import { PounceSystem } from './systems/pounce.js';
 import { CatSoundVisual } from './systems/soundVisual.js';
 import { StaminaVisual } from './systems/staminaVisual.js';
@@ -53,32 +54,11 @@ hint.className = 'hint';
 hint.textContent = 'WASD move · Shift run (stamina) · Stand in puddles to drink · Ctrl sneak · E pounce · SPACE skill check';
 document.body.appendChild(hint);
 
-const debugPanel = document.createElement('div');
-debugPanel.className = 'debug-panel';
-debugPanel.innerHTML = `
-  <label class="debug-toggle">
-    <input type="checkbox" id="wireframe-toggle" />
-    Show collision wireframes
-  </label>
-`;
-document.body.appendChild(debugPanel);
-
-const wireframeToggle = document.getElementById('wireframe-toggle');
-wireframeToggle.checked = debugSettings.showWireframes;
-wireframeToggle.addEventListener('change', () => {
-    setWireframesVisible(wireframeToggle.checked);
-    rats.forEach((rat) => rat.setDebugVisible(wireframeToggle.checked));
-});
-
-onWireframesChange((visible) => {
-    wireframeToggle.checked = visible;
-    rats.forEach((rat) => rat.setDebugVisible(visible));
-});
+const settings = createSettings({ player, rats });
 
 window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyH') {
         setWireframesVisible(!debugSettings.showWireframes);
-        rats.forEach((rat) => rat.setDebugVisible(debugSettings.showWireframes));
     }
 });
 
@@ -90,7 +70,7 @@ function applyMouseLook(event, sensitivity) {
 }
 
 window.addEventListener('mousemove', (event) => {
-    if (pounce.controlsCamera()) return;
+    if (settings.isOpen || pounce.controlsCamera()) return;
     const locked = document.pointerLockElement === renderer.domElement;
     applyMouseLook(event, locked ? 0.0026 : 0.004);
 });

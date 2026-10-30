@@ -91,6 +91,7 @@ export class PounceSystem {
 
     bindInput() {
         window.addEventListener('keydown', (event) => {
+            if (this.player.controlsBlocked) return;
             if (event.repeat) return;
 
             if (event.code === 'Space' && this.state === 'qte' && !this.resolved) {
