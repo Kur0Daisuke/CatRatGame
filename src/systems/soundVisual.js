@@ -44,7 +44,7 @@ export class CatSoundVisual {
         this.meterEl = document.createElement('div');
         this.meterEl.className = 'noise-meter';
         this.meterEl.innerHTML = `
-          <div class="noise-meter-label">Noise</div>
+          <div class="noise-meter-label">Sound</div>
           <div class="noise-meter-track">
             <div class="noise-meter-fill"></div>
           </div>
@@ -69,7 +69,7 @@ export class CatSoundVisual {
                 ? 'linear-gradient(90deg, #ff9a62, #ff4d4d)'
                 : fill > 0.35
                   ? 'linear-gradient(90deg, #ffe58a, #f0b429)'
-                  : 'linear-gradient(90deg, #a8e6cf, #7ec850)';
+                  : 'linear-gradient(90deg, #a078ca, #d4a6ed)';
         this.meterValue.textContent = `${Math.round(db)} dB`;
         this.meterEl.classList.toggle('noise-meter--loud', fill > 0.65);
 

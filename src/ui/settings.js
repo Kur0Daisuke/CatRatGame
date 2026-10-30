@@ -1,71 +1,45 @@
-import { CAT_MODELS } from '../game/player.js';
 import { debugSettings, onWireframesChange, setWireframesVisible } from '../core/debugSettings.js';
 
-export function createSettings({ player, rats }) {
+export function createSettings({ rats, onChange }) {
     const root = document.createElement('div');
     root.className = 'settings';
-    root.innerHTML = `
-        <button class="settings-button" type="button" aria-expanded="false" aria-controls="game-settings">
-            <span aria-hidden="true">⚙</span> Settings
-        </button>
-        <section class="settings-panel" id="game-settings" aria-labelledby="settings-title" hidden>
-            <h2 id="settings-title">Settings</h2>
-            <label class="settings-label" for="cat-model">Cat model</label>
-            <select id="cat-model">${CAT_MODELS.map((model) => `<option value="${model.id}">${model.label}</option>`).join('')}</select>
-            <label class="debug-toggle">
-                <input type="checkbox" id="wireframe-toggle" />
-                Show collision wireframes
-            </label>
-            <p class="settings-status" role="status" hidden></p>
-            <p class="settings-help">Esc to close · H to toggle wireframes</p>
-        </section>
-    `;
+    root.hidden = true;
+    root.innerHTML = `<section class="settings-panel" id="game-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <p class="eyebrow">TAKE A BREATHER</p><h2 id="settings-title">Settings</h2>
+        <label class="debug-toggle"><input type="checkbox" id="wireframe-toggle"> Show collision wireframes</label>
+        <div class="settings-controls"><p><kbd>W A S D</kbd> Move</p><p><kbd>SHIFT</kbd> Run <kbd>CTRL</kbd> Sneak</p><p><kbd>E</kbd> Pounce <kbd>SPACE</kbd> Skill check</p><p>Stand in puddles to restore stamina.</p></div>
+        <button class="resume-game" type="button">RESUME <span>ESC ↗</span></button>
+        <p class="settings-help">Click the garden after resuming to capture the mouse.</p>
+    </section>`;
     document.body.appendChild(root);
-    const button = root.querySelector('button');
-    const panel = root.querySelector('section');
-    const select = root.querySelector('select');
-    const wireframe = root.querySelector('input');
-    const status = root.querySelector('[role="status"]');
+    const resume = root.querySelector('button');
+    let previousFocus;
     const settings = {
-        get isOpen() { return !panel.hidden; },
+        get isOpen() { return !root.hidden; },
         setOpen(open) {
-            panel.hidden = !open;
-            button.setAttribute('aria-expanded', String(open));
-            player.setControlsBlocked(open);
-            if (open && document.pointerLockElement) document.exitPointerLock();
-            if (!open && root.contains(document.activeElement)) button.focus();
+            if (open === settings.isOpen) return;
+            root.hidden = !open;
+            onChange(open);
+            if (open) {
+                previousFocus = document.activeElement;
+                if (document.pointerLockElement) document.exitPointerLock();
+                resume.focus();
+            } else if (previousFocus?.isConnected) previousFocus.focus();
         }
     };
-    button.addEventListener('click', () => settings.setOpen(panel.hidden));
-    document.addEventListener('keydown', (event) => {
-        if (event.code === 'Escape' && settings.isOpen) {
-            event.preventDefault();
-            settings.setOpen(false);
-        }
+    resume.addEventListener('click', () => settings.setOpen(false));
+    root.addEventListener('keydown', event => {
+        if (event.key !== 'Tab') return;
+        const first = root.querySelector('input');
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); resume.focus(); }
+        else if (!event.shiftKey && document.activeElement === resume) { event.preventDefault(); first.focus(); }
     });
-    document.addEventListener('pointerdown', (event) => {
-        if (settings.isOpen && !root.contains(event.target)) settings.setOpen(false);
-    });
-    select.addEventListener('change', async () => {
-        select.disabled = true;
-        status.hidden = false;
-        status.textContent = 'Loading cat…';
-        try {
-            await player.setCatModel(select.value);
-            status.hidden = true;
-        } catch (error) {
-            select.value = player.catModelId;
-            status.textContent = 'Could not load this cat. Please try again.';
-            console.error(error);
-        } finally {
-            select.disabled = false;
-        }
-    });
+    const wireframe = root.querySelector('input');
     wireframe.checked = debugSettings.showWireframes;
     wireframe.addEventListener('change', () => setWireframesVisible(wireframe.checked));
-    onWireframesChange((visible) => {
+    onWireframesChange(visible => {
         wireframe.checked = visible;
-        rats.forEach((rat) => rat.setDebugVisible(visible));
+        rats.forEach(rat => rat.setDebugVisible(visible));
     });
     return settings;
 }

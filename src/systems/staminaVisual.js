@@ -39,6 +39,6 @@ export class StaminaVisual {
                 ? 'linear-gradient(90deg, #c45c5c, #8a3030)'
                 : ratio < 0.35
                   ? 'linear-gradient(90deg, #ffe58a, #e8a838)'
-                  : 'linear-gradient(90deg, #7ec8e3, #3d8fbf)';
+                  : 'linear-gradient(90deg, #8bcc28, #cdff45)';
     }
 }

@@ -25,6 +25,7 @@ export class Player {
         this.modelCache = new Map();
         this.modelRequest = 0;
         this.controlsBlocked = false;
+        this.isDeployed = false;
         this.walkSpeed = 2;
         this.runSpeed = 4.85;
         this.sneakSpeed = 1.15;
@@ -87,7 +88,8 @@ export class Player {
         this.sightSphere.radius = this.baseAerialRadius;
         this.collisionSphere.radius = 0.5;
         Entity.appendEntity('player', this, 1);
-        this.setCatModel('original').catch((error) => console.error('Could not load cat:', error));
+        this.ready = this.setCatModel('original');
+        this.ready.catch((error) => console.error('Could not load cat:', error));
     }
 
     async setCatModel(id) {
@@ -159,6 +161,7 @@ export class Player {
     }
 
     stun(duration = 1.5) {
+        if (!this.isDeployed) return;
         if (this.isLocked) return;
         if (!this.isStunned && !this.isRecovering) {
             this.isStunned = true;

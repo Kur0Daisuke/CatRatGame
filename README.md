@@ -21,6 +21,6 @@ src/
 - `npm run dev` — local dev server
 - `npm run build` — production build to `dist/`
 
-The top-right Settings menu selects the original cat or the orange, white, and blue coat variants, and toggles collision wireframes. Press Esc to release mouse capture before opening Settings. H also toggles wireframes.
+The opening menu overlays the live garden. Choose a cat and read the rat profiles, then start to drop from the sky. Controls unlock after landing. The bottom-left HUD shows stamina, sound, and catches. Escape toggles settings and pauses gameplay, including skill checks. Click the garden after resuming to capture the mouse. H toggles wireframes.
 
 Cat variants are standalone GLB models in `public/models/`. Run `node scripts/create-cat-variants.cjs` to regenerate them from `public/car.glb`, preserving its geometry, fur detail, and animations.
