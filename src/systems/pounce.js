@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { sampleTerrainHeight } from '../core/collision.js';
 import { triggerKillPanic } from '../game/ratKillPanic.js';
+import { interruptRatConversation } from '../game/ratConversation.js';
+import { onCatAttacksRat } from '../game/ratCouncilResponse.js';
 
 const POUNCE_RANGE = 2.85;
 const POUNCE_ARM_DELAY = 0.78;
@@ -9,12 +11,14 @@ const POUNCE_AIM_MIN_DOT = Math.cos((POUNCE_AIM_HALF_ANGLE_DEG * Math.PI) / 180)
 const LEAP_DURATION = 0.42;
 const PIN_DURATION = 0.38;
 const CAMERA_BLEND = 7.5;
+/** At full bush cover, E pounce charge fills this much faster than in the open. */
+const BUSH_POUNCE_CHARGE_MAX_MUL = 1.9;
 
-/** Dead by Daylight–style check tuning per rat type. */
+/** One pass of the marker per round. Round count is fixed by rat type. */
 const QTE_BY_KIND = {
-    dumb: { speed: 0.78, zoneWidth: 0.19, duration: 4.4, speedJitter: 0.08 },
-    scout: { speed: 1.42, zoneWidth: 0.11, duration: 3.5, speedJitter: 0.18 },
-    pouncer: { speed: 1.05, zoneWidth: 0.14, duration: 3.8, speedJitter: 0.35 }
+    dumb: { speed: 0.72, zoneWidth: 0.2, rounds: 1, speedJitter: 0.06 },
+    scout: { speed: 1.05, zoneWidth: 0.14, rounds: 2, speedJitter: 0.08 },
+    pouncer: { speed: 0.9, zoneWidth: 0.15, rounds: 3, speedJitter: 0.08 }
 };
 
 export class PounceSystem {
@@ -33,10 +37,11 @@ export class PounceSystem {
         this.resolved = false;
 
         this.qteMarker = 0;
-        this.qteDirection = 1;
         this.qteZoneStart = 0.35;
         this.qteConfig = null;
         this.qteSpeed = 1;
+        this.qteRound = 1;
+        this.qteRoundsTotal = 1;
 
         this._world = new THREE.Vector3();
         this._screen = new THREE.Vector3();
@@ -123,7 +128,7 @@ export class PounceSystem {
         return {
             speed: base.speed * speedMul,
             zoneWidth: base.zoneWidth,
-            duration: base.duration
+            rounds: base.rounds
         };
     }
 
@@ -223,6 +228,7 @@ export class PounceSystem {
         }
 
         if (this.state === 'leaping') {
+            rat.stayPinned?.();
             if (!this.player.leapActive) {
                 this.state = 'pinning';
                 this.elapsed = 0;
@@ -232,6 +238,7 @@ export class PounceSystem {
         }
 
         if (this.state === 'pinning') {
+            rat.stayPinned?.();
             if (this.elapsed >= PIN_DURATION) {
                 this.beginQte();
             }
@@ -239,14 +246,13 @@ export class PounceSystem {
         }
 
         if (this.state === 'qte') {
+            rat.stayPinned?.();
             this.updateQte(delta);
-            if (this.elapsed >= this.qteConfig.duration && !this.resolved) {
-                this.resolveQte(false);
-            }
             return;
         }
 
         if (this.state === 'consuming') {
+            rat.stayPinned?.();
             if (!rat.updateConsume(delta)) return;
             this.finishConsume(rat);
             this.showToast('Caught! +1', 'success');
@@ -257,25 +263,33 @@ export class PounceSystem {
     beginQte() {
         const rat = this.targetRat;
         this.state = 'qte';
-        this.elapsed = 0;
         this.resolved = false;
         this.qteConfig = this.buildQteConfig(rat);
         this.qteSpeed = this.qteConfig.speed;
-        this.qteMarker = Math.random() < 0.5 ? 0.08 : 0.92;
-        this.qteDirection = this.qteMarker < 0.5 ? 1 : -1;
-
-        const margin = 0.08;
-        const maxStart = 1 - this.qteConfig.zoneWidth - margin;
-        this.qteZoneStart = margin + Math.random() * Math.max(maxStart - margin, 0.05);
+        this.qteRoundsTotal = this.qteConfig.rounds;
+        this.qteRound = 1;
+        rat?.stayPinned?.();
 
         this.overlayEl.hidden = false;
-        if (this.qteLabelEl) {
-            const kindLabel = rat?.kind ? ` (${rat.kind})` : '';
-            this.qteLabelEl.innerHTML =
-                `Press <kbd class="pounce-qte-key">SPACE</kbd> in the zone${kindLabel}`;
-        }
         if (document.pointerLockElement) {
             document.exitPointerLock();
+        }
+        this.startQteRound();
+    }
+
+    startQteRound() {
+        const cfg = this.qteConfig;
+        if (!cfg) return;
+        this.elapsed = 0;
+        this.resolved = false;
+        this.qteMarker = 0;
+        const margin = 0.34;
+        const maxStart = 1 - cfg.zoneWidth - 0.08;
+        this.qteZoneStart = margin + Math.random() * Math.max(maxStart - margin, 0.05);
+        if (this.qteLabelEl) {
+            const kindLabel = this.targetRat?.kind ? ` · ${this.targetRat.kind}` : '';
+            this.qteLabelEl.innerHTML =
+                `Round ${this.qteRound}/${this.qteRoundsTotal}${kindLabel} — press <kbd class="pounce-qte-key">SPACE</kbd> in the zone`;
         }
         this.applyQteVisuals();
     }
@@ -286,22 +300,20 @@ export class PounceSystem {
         this.zoneEl.style.width = `${cfg.zoneWidth * 100}%`;
         this.zoneEl.style.left = `${this.qteZoneStart * 100}%`;
         this.markerEl.style.left = `${this.qteMarker * 100}%`;
-        const remaining = 1 - THREE.MathUtils.clamp(this.elapsed / cfg.duration, 0, 1);
+        const zoneEnd = this.qteZoneStart + cfg.zoneWidth;
+        const remaining = 1 - THREE.MathUtils.clamp(this.qteMarker / Math.max(zoneEnd, 0.01), 0, 1);
         this.timerFillEl.style.transform = `scaleX(${remaining})`;
     }
 
     updateQte(delta) {
         const cfg = this.qteConfig;
-        if (!cfg) return;
+        if (!cfg || this.resolved) return;
 
-        const wobble = 1 + Math.sin(this.elapsed * 7.5) * 0.04;
-        this.qteMarker += this.qteDirection * cfg.speed * wobble * delta;
-        if (this.qteMarker >= 1) {
-            this.qteMarker = 1;
-            this.qteDirection = -1;
-        } else if (this.qteMarker <= 0) {
-            this.qteMarker = 0;
-            this.qteDirection = 1;
+        this.qteMarker += cfg.speed * delta;
+        const zoneEnd = this.qteZoneStart + cfg.zoneWidth + 0.012;
+        if (this.qteMarker > zoneEnd) {
+            this.resolveQte(false);
+            return;
         }
 
         this.applyQteVisuals();
@@ -319,10 +331,17 @@ export class PounceSystem {
 
     resolveQte(success) {
         if (this.resolved || this.state !== 'qte') return;
+
+        const rat = this.targetRat;
+        if (success && rat && this.qteRound < this.qteRoundsTotal) {
+            this.qteRound += 1;
+            this.startQteRound();
+            return;
+        }
+
         this.resolved = true;
         this.overlayEl.hidden = true;
 
-        const rat = this.targetRat;
         if (success && rat) {
             this.score += 1;
             this.scoreEl.textContent = `Caught: ${this.score}`;
@@ -363,11 +382,13 @@ export class PounceSystem {
         }
         this._side.set(-this._behind.z, 0, this._behind.x);
 
+        const groundY = sampleTerrainHeight(ratPos.x, ratPos.z);
+        const focusY = Math.max(ratPos.y, groundY);
         this._camTarget.copy(ratPos)
             .addScaledVector(this._behind, 1.15)
             .addScaledVector(this._side, 0.28);
-        this._camTarget.y = ratPos.y + 0.62;
-        this._camLook.set(ratPos.x, ratPos.y + 0.18, ratPos.z);
+        this._camTarget.y = focusY + 0.72;
+        this._camLook.set(ratPos.x, focusY + 0.22, ratPos.z);
 
         const follow = 1 - Math.exp(-CAMERA_BLEND * delta);
         this.camera.position.lerp(this._camTarget, follow);
@@ -398,10 +419,13 @@ export class PounceSystem {
             this.promptTarget = rat;
             this.promptCharge = 0;
         }
-        this.promptCharge = Math.min(POUNCE_ARM_DELAY, this.promptCharge + delta);
+        const sneak = THREE.MathUtils.clamp(this.player.bushBlend ?? 0, 0, 1);
+        const chargeMul = 1 + sneak * (BUSH_POUNCE_CHARGE_MAX_MUL - 1);
+        this.promptCharge = Math.min(POUNCE_ARM_DELAY, this.promptCharge + delta * chargeMul);
         this.player.pounceAimRat = rat;
         this.player.pounceAimCharge = this.promptCharge;
         const ready = this.promptCharge >= POUNCE_ARM_DELAY;
+        const sneaking = sneak > 0.28;
 
         this.promptRat = rat;
         this._screen.copy(rat.ratContainer.position);
@@ -414,6 +438,7 @@ export class PounceSystem {
         const x = (this._screen.x * 0.5 + 0.5) * window.innerWidth;
         const y = (-this._screen.y * 0.5 + 0.5) * window.innerHeight;
         this.promptEl.hidden = false;
+        this.promptEl.classList.toggle('pounce-prompt-sneak', sneaking);
         const pct = Math.round((this.promptCharge / POUNCE_ARM_DELAY) * 100);
         if (ready) {
             this.promptEl.innerHTML = '<span class="pounce-prompt-key">E</span>';
@@ -429,6 +454,7 @@ export class PounceSystem {
         this.promptEl.hidden = true;
         this.promptRat = null;
         this.promptEl.classList.remove('pounce-prompt-charging');
+        this.promptEl.classList.remove('pounce-prompt-sneak');
     }
 
     showToast(text, kind) {
@@ -453,6 +479,8 @@ export class PounceSystem {
         this.elapsed = 0;
         this.resolved = false;
         this.qteConfig = null;
+        this.qteRound = 1;
+        this.qteRoundsTotal = 1;
         this.overlayEl.hidden = true;
         this.player.endPounce();
         if (relock) this.relockPointer();

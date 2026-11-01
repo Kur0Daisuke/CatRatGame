@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Entity } from '../core/entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainPose, sampleTerrainHeight } from '../core/collision.js';
+import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainPose, sampleTerrainHeight, isInBushCover, BUSH_COVER_EXIT } from '../core/collision.js';
 import { computeCatSourceDecibels } from '../systems/catSound.js';
 import { findPuddleAtPosition } from '../world/puddles.js';
 
@@ -35,7 +35,7 @@ export class Player {
         this.isRunning = false;
         this.isSneaking = false;
         this.shiftHeld = false;
-        this.ctrlHeld = false;
+        this.sneakHeld = false;
         this.soundTime = 0;
 
         this.targetQuaternion = new THREE.Quaternion();
@@ -65,6 +65,7 @@ export class Player {
 
         // Bush Stealth & Sound Flags
         this.hiddenInBush = false;
+        this.bushCoverActive = false;
         this.bushBlend = 0;
         this.targetBushBlend = 0;
         this.isMoving = false;
@@ -144,14 +145,21 @@ export class Player {
         this.walkDirectionX = 0;
         this.walkDirectionZ = 0;
         this.shiftHeld = false;
-        this.ctrlHeld = false;
+        this.sneakHeld = false;
+    }
+
+    isSneakKey(event) {
+        return event.code === 'KeyC' && !event.ctrlKey && !event.metaKey && !event.altKey;
     }
 
     initControls() {
-        window.addEventListener("keydown", (e) => {
+        window.addEventListener('keydown', (e) => {
             if (this.controlsBlocked) return;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftHeld = true;
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.ctrlHeld = true;
+            if (this.isSneakKey(e)) {
+                this.sneakHeld = true;
+                if (this.isDeployed) e.preventDefault();
+            }
             if (this.isStunned || this.isRecovering || this.isLocked) return;
             switch(e.key) {
                 case "d": this.walkDirectionX = 1; break;
@@ -161,9 +169,9 @@ export class Player {
             }
         });
 
-        window.addEventListener("keyup", (e) => {
+        window.addEventListener('keyup', (e) => {
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftHeld = false;
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.ctrlHeld = false;
+            if (e.code === 'KeyC') this.sneakHeld = false;
             switch(e.key) {
                 case "d":
                 case "a": this.walkDirectionX = 0; break;
@@ -265,10 +273,19 @@ export class Player {
         this.sightSphere.center.set(bodyCenter.x, sphereY, bodyCenter.z);
         this.collisionSphere.center.set(bodyCenter.x, bodyCenter.y + 0.25, bodyCenter.z);
 
-        this.targetBushBlend = computeBushBlend(bodyCenter, bushes);
+        this.targetBushBlend = this.isDeployed ? computeBushBlend(bodyCenter, bushes) : 0;
         const bushLerp = 1 - Math.exp(-10 * delta);
-        this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, this.targetBushBlend, bushLerp);
-        this.hiddenInBush = this.bushBlend > 0.52;
+        if (!this.isDeployed) {
+            this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, 0, bushLerp);
+            this.bushCoverActive = false;
+            this.hiddenInBush = false;
+        } else {
+            this.bushCoverActive = isInBushCover(this.targetBushBlend, this.bushCoverActive);
+            this.hiddenInBush = this.bushCoverActive;
+            const blendTarget = this.bushCoverActive ? this.targetBushBlend : this.targetBushBlend;
+            const blendRate = this.targetBushBlend <= BUSH_COVER_EXIT ? bushLerp * 3.5 : bushLerp;
+            this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, blendTarget, blendRate);
+        }
 
         if (this.catVfx && this.isDeployed) {
             const cur = this.targetBushBlend;
@@ -291,10 +308,10 @@ export class Player {
             this.bushBlend
         );
         this.isMoving = this.walkDirectionX !== 0 || this.walkDirectionZ !== 0;
-        const wantsRun = this.isMoving && this.shiftHeld && !this.ctrlHeld;
+        const wantsRun = this.isMoving && this.shiftHeld && !this.sneakHeld;
         const canRun = this.stamina > this.runMinStamina;
         this.isRunning = wantsRun && canRun;
-        this.isSneaking = this.isMoving && this.ctrlHeld && !this.shiftHeld;
+        this.isSneaking = this.isMoving && this.sneakHeld && !this.shiftHeld;
         this.speed = this.isRunning
             ? this.runSpeed
             : this.isSneaking

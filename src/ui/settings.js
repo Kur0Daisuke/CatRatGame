@@ -6,8 +6,8 @@ export function createSettings({ rats, onChange }) {
     root.hidden = true;
     root.innerHTML = `<section class="settings-panel" id="game-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <p class="eyebrow">TAKE A BREATHER</p><h2 id="settings-title">Settings</h2>
-        <label class="debug-toggle"><input type="checkbox" id="wireframe-toggle"> Show debug wireframes (collision, avoid zones)</label>
-        <div class="settings-controls"><p><kbd>W A S D</kbd> Move</p><p><kbd>SHIFT</kbd> Run <kbd>CTRL</kbd> Sneak</p><p><kbd>E</kbd> Pounce <kbd>SPACE</kbd> Skill check</p><p>Stand in puddles to restore stamina.</p></div>
+        <label class="debug-toggle"><input type="checkbox" id="wireframe-toggle"> Show debug wireframes (rats, bush cover rings)</label>
+        <div class="settings-controls"><p><kbd>W A S D</kbd> Move</p><p><kbd>SHIFT</kbd> Run <kbd>C</kbd> Sneak</p><p><kbd>E</kbd> Pounce <kbd>SPACE</kbd> Skill check</p><p>Stand in puddles to restore stamina.</p></div>
         <button class="resume-game" type="button">RESUME <span>ESC ↗</span></button>
         <p class="settings-help">Click the garden after resuming to capture the mouse.</p>
     </section>`;

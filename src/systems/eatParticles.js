@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { createSoftPointsMaterial } from './softParticleTexture.js';
 
-const POOL_SIZE = 48;
+const POOL_SIZE = 56;
 
 export class EatParticleBurst {
     constructor(scene) {
@@ -20,22 +21,22 @@ export class EatParticleBurst {
             positions[i * 3 + 2] = worldPos.z + (Math.random() - 0.5) * 0.25;
 
             const v = new THREE.Vector3(
-                (Math.random() - 0.5) * 2.4,
-                0.8 + Math.random() * 2.2,
-                (Math.random() - 0.5) * 2.4
+                (Math.random() - 0.5) * 1.8,
+                0.55 + Math.random() * 1.6,
+                (Math.random() - 0.5) * 1.8
             );
+            v.multiplyScalar(0.85 + Math.random() * 0.35);
             velocities.push(v);
         }
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const material = new THREE.PointsMaterial({
-            color: 0xcc1111,
-            size: 0.14,
-            transparent: true,
-            opacity: 0.95,
-            depthWrite: false,
-            sizeAttenuation: true
+        const tint = 0.78 + Math.random() * 0.22;
+        const material = createSoftPointsMaterial({
+            color: new THREE.Color(0.9 * tint, 0.08 * tint, 0.1 * tint),
+            size: 0.28 + Math.random() * 0.08,
+            opacity: 0.72,
+            blending: THREE.NormalBlending
         });
         const points = new THREE.Points(geometry, material);
         this.scene.add(points);
@@ -67,11 +68,14 @@ export class EatParticleBurst {
             const arr = attr.array;
             for (let i = 0; i < burst.velocities.length; i++) {
                 const v = burst.velocities[i];
-                v.y -= delta * 4.2;
+                v.y -= delta * 3.4;
+                v.x *= 0.985;
+                v.z *= 0.985;
                 arr[i * 3] += v.x * delta;
                 arr[i * 3 + 1] += v.y * delta;
                 arr[i * 3 + 2] += v.z * delta;
             }
+            burst.material.size *= 1 + delta * 0.35;
             attr.needsUpdate = true;
 
             if (burst.life <= 0) {

@@ -36,7 +36,7 @@ export function senseCat(rat, playerEntity, now) {
 
     const distance = ratPos.distanceTo(catCenter);
 
-    const catHiddenInBush = (playerEntity.bushBlend ?? 0) > 0.72;
+    const catHiddenInBush = playerEntity.bushCoverActive === true;
 
 
 

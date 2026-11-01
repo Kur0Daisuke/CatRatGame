@@ -28,6 +28,9 @@ import { StaminaVisual } from './systems/staminaVisual.js';
 
 import { PuddleWaveSystem } from './systems/puddleWaves.js';
 import { updateRatConversations } from './game/ratConversation.js';
+import { createBushVignette } from './ui/bushVignette.js';
+import { createBushCoverHud } from './ui/bushCoverHud.js';
+import { createBushCoverDebug } from './world/bushCoverDebug.js';
 
 
 
@@ -105,13 +108,20 @@ hud.className = 'game-hud';
 
 hud.setAttribute('aria-label', 'Hunter status');
 
-hud.innerHTML = '<div class="hud-emblem" aria-hidden="true">C/R</div><div class="hud-bars"></div>';
+hud.innerHTML = '<div class="hud-bars"></div>';
 
 document.body.appendChild(hud);
 
-hud.querySelector('.hud-bars').append(staminaVisual.meterEl, soundVisual.meterEl);
+const bushCoverHud = createBushCoverHud();
+const hudStats = document.createElement('div');
+hudStats.className = 'hud-stats';
+hud.appendChild(hudStats);
+hudStats.append(pounce.scoreEl, bushCoverHud.el);
 
-hud.appendChild(pounce.scoreEl);
+const bushVignette = createBushVignette();
+const bushCoverDebug = createBushCoverDebug(scene, () => bushes);
+
+hud.querySelector('.hud-bars').append(staminaVisual.meterEl, soundVisual.meterEl);
 
 const staminaValue = document.createElement('span');
 
@@ -235,6 +245,10 @@ function animate(time) {
 
             puddleWaves.update(delta, player, rats);
 
+            bushCoverHud.update(player);
+            bushVignette.update(player, delta, phase === 'playing' && !settings.isOpen);
+            bushCoverDebug.update();
+
         } else if (phase === 'dropping') {
 
             dropTime += delta;
@@ -272,7 +286,11 @@ function animate(time) {
 
                     player.setControlsBlocked(false);
 
-                    player._prevTargetBushBlend = player.targetBushBlend ?? 0;
+                    player.bushBlend = 0;
+                    player.targetBushBlend = 0;
+                    player.hiddenInBush = false;
+                    player.bushCoverActive = false;
+                    player._prevTargetBushBlend = 0;
 
                 }
 

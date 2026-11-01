@@ -585,13 +585,29 @@ export class Rat {
         this.isPinned = true;
         this.isEscaping = false;
         this.isEngaging = false;
+        this.isInvestigating = false;
+        this.isWarning = false;
+        this.isEscorting = false;
+        this.isBeingEscorted = false;
         this.pouncerJumpPhase = 'none';
         this.state = 'PINNED';
         this.flipProgress = 0;
         this.isFlipping = false;
         this.hasStunnedCat = false;
+        this.pinX = this.ratContainer.position.x;
+        this.pinZ = this.ratContainer.position.z;
         this.hideChat();
         if (this.ratModel) this.ratModel.position.y = 0.1;
+        this.stayPinned();
+    }
+
+    stayPinned() {
+        if (!this.ratContainer || !this.isPinned) return;
+        this.isEscaping = false;
+        this.state = 'PINNED';
+        if (this.pinX != null) this.ratContainer.position.x = this.pinX;
+        if (this.pinZ != null) this.ratContainer.position.z = this.pinZ;
+        applyTerrainPose(this.ratContainer, this.headingYaw, 0, 0);
     }
 
     playFlip() {
@@ -621,10 +637,15 @@ export class Rat {
     updateConsume(delta) {
         this.consumeProgress += delta / 0.45;
         const t = Math.min(1, this.consumeProgress);
-        const scale = Math.max(0.01, 1 - t);
+        const scale = Math.max(0.08, 1 - t * 0.92);
         this.ratContainer.scale.setScalar(scale);
-        this.ratContainer.position.y = t * 0.35;
-        if (this.ratModel) this.ratModel.rotation.x = Math.PI;
+        if (this.pinX != null) this.ratContainer.position.x = this.pinX;
+        if (this.pinZ != null) this.ratContainer.position.z = this.pinZ;
+        applyTerrainPose(this.ratContainer, this.headingYaw, 0, 0);
+        if (this.ratModel) {
+            this.ratModel.rotation.x = Math.PI * 0.5 * t;
+            this.ratModel.position.y = 0.12 * (1 - t * 0.35);
+        }
         return t >= 1;
     }
 
@@ -804,6 +825,7 @@ export class Rat {
         const now = this.worldTime;
 
         if (this.isPinned) {
+            this.stayPinned();
             this.ratModel.getWorldPosition(this._worldPosition);
             this.visionSphere.center.copy(this._worldPosition);
             this.collisionSphere.center.set(

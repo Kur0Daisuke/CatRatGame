@@ -18,6 +18,11 @@ export function isInsideFencedYard(x, z, radius = YARD_SPAWN_RADIUS) {
     return Math.hypot(x, z) <= radius;
 }
 
+/** Playable garden disk centered on the cat/rat yard focus. */
+export function isInsideYard(x, z, radius = YARD_SPAWN_RADIUS) {
+    return Math.hypot(x - YARD_CENTER_X, z - YARD_CENTER_Z) <= radius;
+}
+
 /** Uniform random XZ inside a circle. */
 export function randomPointInDisk(radius) {
     const t = Math.random() * Math.PI * 2;

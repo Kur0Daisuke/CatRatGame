@@ -1,6 +1,59 @@
 import * as THREE from 'three';
 import { PLAY_RADIUS, YARD_CENTER_X, YARD_CENTER_Z, ARENA_EDGE_MARGIN } from './worldBounds.js';
 
+/** Soft falloff beyond each bush's hard cover radius (world units). */
+export const BUSH_COVER_FADE = 0.28;
+
+/** Target blend at/above this = in bush (HUD, stealth). */
+export const BUSH_COVER_ENTER = 0.42;
+export const BUSH_COVER_EXIT = 0.08;
+
+const _bushWorld = new THREE.Vector3();
+
+export function computeBushBlend(position, bushes, fadeRadius = BUSH_COVER_FADE) {
+    if (!bushes || bushes.length === 0) return 0;
+
+    const px = position.x;
+    const pz = position.z;
+    let blend = 0;
+
+    for (const bush of bushes) {
+        let bx;
+        let bz;
+        let radius = bush.coverRadius;
+
+        if (bush.mesh) {
+            bush.mesh.getWorldPosition(_bushWorld);
+            bx = _bushWorld.x;
+            bz = _bushWorld.z;
+        } else if (bush.x != null && bush.coverRadius != null) {
+            bx = bush.x;
+            bz = bush.z;
+        } else {
+            continue;
+        }
+
+        if (radius == null || !Number.isFinite(radius)) radius = 0.32;
+
+        const dist = Math.hypot(px - bx, pz - bz);
+        if (dist > radius + fadeRadius) continue;
+
+        const local = 1 - THREE.MathUtils.smoothstep(radius, radius + fadeRadius, dist);
+        if (local > blend) blend = local;
+        if (blend >= 1) break;
+    }
+
+    return THREE.MathUtils.clamp(blend, 0, 1);
+}
+
+/** In-bush flag from target blend only (no sticky middle band). */
+export function isInBushCover(targetBlend, wasActive) {
+    const t = THREE.MathUtils.clamp(targetBlend, 0, 1);
+    if (t >= BUSH_COVER_ENTER) return true;
+    if (t <= BUSH_COVER_EXIT) return false;
+    return wasActive;
+}
+
 const _closest = new THREE.Vector3();
 const _normal = new THREE.Vector3();
 const _targetQuat = new THREE.Quaternion();
@@ -112,23 +165,6 @@ export function xzDistanceToBox(point, box) {
     const cx = THREE.MathUtils.clamp(point.x, box.min.x, box.max.x);
     const cz = THREE.MathUtils.clamp(point.z, box.min.z, box.max.z);
     return Math.hypot(point.x - cx, point.z - cz);
-}
-
-/**
- * 0 = open field, 1 = fully inside bush cover.
- * Uses a soft falloff outside the bush footprint so enter/exit eases in.
- */
-export function computeBushBlend(position, bushes, fadeRadius = 0.55) {
-    if (!bushes || bushes.length === 0) return 0;
-
-    let blend = 0;
-    for (const bush of bushes) {
-        if (!bush.box) continue;
-        const dist = xzDistanceToBox(position, bush.box);
-        const local = 1 - THREE.MathUtils.smoothstep(0, fadeRadius, dist);
-        blend = Math.max(blend, local);
-    }
-    return THREE.MathUtils.clamp(blend, 0, 1);
 }
 
 export function clampPositionToArena(position, radius = PLAY_RADIUS, margin = 0.55, footOffset = 0) {

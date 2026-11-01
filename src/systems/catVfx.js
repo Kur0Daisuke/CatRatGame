@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sampleTerrainHeight } from '../core/collision.js';
+import { createSoftPointsMaterial } from './softParticleTexture.js';
 
 const SMOKE_COUNT = 72;
 const LEAF_COLORS = [0x4a7c34, 0x5f9a42, 0x3d5c28, 0x8b7355, 0x6b8f4e];
@@ -17,13 +18,11 @@ function makeBurst(scene, count, color, size, life, spawnFn) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const material = new THREE.PointsMaterial({
+    const material = createSoftPointsMaterial({
         size,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false,
-        sizeAttenuation: true,
-        vertexColors: true
+        opacity: 0.55,
+        vertexColors: true,
+        blending: THREE.NormalBlending
     });
     const points = new THREE.Points(geometry, material);
     scene.add(points);
@@ -55,7 +54,7 @@ export class CatVfx {
             this.scene,
             SMOKE_COUNT,
             0xb8b8b8,
-            0.22,
+            0.38,
             1.35,
             (i, positions, velocities, colors, base) => {
                 const angle = Math.random() * Math.PI * 2;
@@ -79,16 +78,16 @@ export class CatVfx {
                 colors[i * 3 + 2] = base.b * shade;
             }
         );
-        burst.gravity = -0.35;
-        burst.drag = 0.92;
-        burst.expand = 1.012;
+        burst.gravity = -0.28;
+        burst.drag = 0.94;
+        burst.expand = 1.004;
         this.bursts.push(burst);
 
         const ring = makeBurst(
             this.scene,
             28,
             0xd4d4d4,
-            0.16,
+            0.26,
             0.85,
             (i, positions, velocities, colors, base) => {
                 const angle = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
@@ -110,9 +109,9 @@ export class CatVfx {
 
     /** @param {THREE.Vector3} worldPos @param {number} strength 0–1 @param {boolean} [light] */
     spawnBushLeaves(worldPos, strength = 0.5, light = false) {
-        const count = light ? 6 + Math.floor(Math.random() * 5) : 18 + Math.floor(strength * 22);
-        const size = light ? 0.07 : 0.11;
-        const life = light ? 0.55 : 0.95;
+        const count = light ? 8 + Math.floor(Math.random() * 6) : 22 + Math.floor(strength * 26);
+        const size = light ? 0.14 : 0.2;
+        const life = light ? 0.65 : 1.05;
 
         const burst = makeBurst(this.scene, count, LEAF_COLORS[0], size, life, (i, positions, velocities, colors) => {
             const color = new THREE.Color(LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)]);
@@ -122,17 +121,18 @@ export class CatVfx {
 
             velocities.push(
                 new THREE.Vector3(
-                    (Math.random() - 0.5) * (light ? 1.2 : 2.4),
-                    (Math.random() - 0.2) * (light ? 0.8 : 1.6),
-                    (Math.random() - 0.5) * (light ? 1.2 : 2.4)
+                    (Math.random() - 0.5) * (light ? 1.4 : 2.2),
+                    0.35 + Math.random() * (light ? 0.9 : 1.4),
+                    (Math.random() - 0.5) * (light ? 1.4 : 2.2)
                 )
             );
             colors[i * 3] = color.r;
             colors[i * 3 + 1] = color.g;
             colors[i * 3 + 2] = color.b;
         });
-        burst.gravity = -2.8;
-        burst.drag = 0.98;
+        burst.gravity = -1.6;
+        burst.drag = 0.985;
+        burst.flutter = true;
         this.bursts.push(burst);
     }
 
@@ -141,13 +141,17 @@ export class CatVfx {
             const burst = this.bursts[b];
             burst.life -= delta;
             const t = 1 - burst.life / burst.maxLife;
-            burst.material.opacity = Math.max(0, (1 - t * 1.05) * 0.92);
+            burst.material.opacity = Math.max(0, (1 - t * 1.05) * 0.62);
 
             const attr = burst.geometry.attributes.position;
             const arr = attr.array;
             for (let i = 0; i < burst.velocities.length; i++) {
                 const v = burst.velocities[i];
                 v.y += (burst.gravity ?? 0) * delta;
+                if (burst.flutter) {
+                    v.x += Math.sin(burst.life * 14 + i * 0.7) * delta * 0.45;
+                    v.z += Math.cos(burst.life * 11 + i * 0.5) * delta * 0.45;
+                }
                 v.x *= burst.drag ?? 0.96;
                 v.z *= burst.drag ?? 0.96;
                 arr[i * 3] += v.x * delta;

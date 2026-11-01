@@ -25,7 +25,7 @@ export function createMenu({ player, onStart }) {
             <article><span class="rat-number">03</span><div><h3>Pouncer rat <span>THE GUARD</span></h3><p>Reads the yard fast, stuns up close, then bolts. Only rats nearby get the warning.</p></div></article>
             <div class="field-tip"><span>HUNTER'S TIP</span>Keep the noise down. Drink from puddles to recover stamina.</div>
         </aside>
-        <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · CTRL sneak · E pounce · SPACE skill check · ESC settings</span></footer>`;
+        <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · C sneak · E pounce · SPACE skill check · ESC settings</span></footer>`;
     document.body.appendChild(root);
     const start = root.querySelector('.start-game');
     const status = root.querySelector('.menu-status');
