@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { findPuddleAtPosition, pushPuddleRipple, updatePuddleWaveTime } from '../world/puddles.js';
+import { findPuddleAtPosition } from '../world/puddles.js';
 
 const RING_POOL = 28;
 
@@ -61,12 +61,11 @@ export class PuddleWaveSystem {
     }
 
     spawnRipple(puddle, worldX, worldZ, strength) {
-        pushPuddleRipple(puddle, worldX, worldZ, strength, this.time);
-
         const ring = this.rings.find((r) => r.age >= r.maxAge);
         if (!ring) return;
 
-        const y = puddle.mesh.position.y + 0.025;
+        const anchor = puddle.anchor ?? puddle.mesh.parent;
+        const y = (anchor ? anchor.position.y : puddle.mesh.position.y) + 0.025;
         ring.age = 0;
         ring.maxAge = 0.85 + strength * 0.35;
         ring.startScale = 0.35 + strength * 0.2;
@@ -79,7 +78,6 @@ export class PuddleWaveSystem {
 
     update(delta, player, rats = []) {
         this.time += delta;
-        updatePuddleWaveTime(this.puddles, this.time);
 
         if (player?.container) {
             const pos = player.container.position;

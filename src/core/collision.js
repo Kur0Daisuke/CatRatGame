@@ -1,13 +1,25 @@
 import * as THREE from 'three';
-import { PLAY_RADIUS } from './worldBounds.js';
+import { PLAY_RADIUS, YARD_CENTER_X, YARD_CENTER_Z, ARENA_EDGE_MARGIN } from './worldBounds.js';
 
 const _closest = new THREE.Vector3();
+const _normal = new THREE.Vector3();
+const _targetQuat = new THREE.Quaternion();
+const _worldUp = new THREE.Vector3(0, 1, 0);
+const _forward = new THREE.Vector3();
+const _lookMatrix = new THREE.Matrix4();
+const _lookTarget = new THREE.Vector3();
 
 let _terrainHeightAt = null;
+let _terrainNormalAt = null;
 
 /** Register (x, z) => height for terrain following. */
 export function setTerrainSampler(fn) {
     _terrainHeightAt = typeof fn === 'function' ? fn : null;
+}
+
+/** Register (x, z) => THREE.Vector3 normal (optional). */
+export function setTerrainNormalSampler(fn) {
+    _terrainNormalAt = typeof fn === 'function' ? fn : null;
 }
 
 export function sampleTerrainHeight(x, z, fallback = 0) {
@@ -15,8 +27,84 @@ export function sampleTerrainHeight(x, z, fallback = 0) {
     return _terrainHeightAt(x, z);
 }
 
+export function sampleTerrainNormal(x, z) {
+    if (_terrainNormalAt) {
+        const n = _terrainNormalAt(x, z);
+        if (n) return _normal.copy(n).normalize();
+    }
+    const eps = 0.38;
+    const dhdx =
+        (sampleTerrainHeight(x + eps, z) - sampleTerrainHeight(x - eps, z)) / (2 * eps);
+    const dhdz =
+        (sampleTerrainHeight(x, z + eps) - sampleTerrainHeight(x, z - eps)) / (2 * eps);
+    return _normal.set(-dhdx, 1, -dhdz).normalize();
+}
+
 export function applyTerrainHeight(position, footOffset = 0) {
     position.y = sampleTerrainHeight(position.x, position.z) + footOffset;
+}
+
+function quatFromSurfaceHeading(normal, headingYaw, position, targetQuat) {
+    const flipped = headingYaw + Math.PI;
+    _forward.set(Math.sin(flipped), 0, Math.cos(flipped));
+    _forward.addScaledVector(normal, -_forward.dot(normal));
+    if (_forward.lengthSq() < 1e-8) _forward.set(0, 0, 1);
+    _forward.normalize();
+
+    _lookTarget.copy(position).add(_forward);
+    _lookMatrix.lookAt(position, _lookTarget, normal);
+    return targetQuat.setFromRotationMatrix(_lookMatrix);
+}
+
+/**
+ * Y-up characters: stand on slope, local −Z points along heading on the tangent plane.
+ */
+export function applyTerrainPose(object, yaw = 0, footOffset = 0, delta = null) {
+    const x = object.position.x;
+    const z = object.position.z;
+    const groundY = sampleTerrainHeight(x, z);
+    const normal = sampleTerrainNormal(x, z);
+
+    object.position.set(x, groundY, z);
+    if (footOffset !== 0) {
+        object.position.addScaledVector(normal, footOffset);
+    }
+
+    quatFromSurfaceHeading(normal, yaw, object.position, _targetQuat);
+
+    if (delta == null || delta <= 0) {
+        object.quaternion.copy(_targetQuat);
+    } else {
+        const t = 1 - Math.exp(-11 * delta);
+        object.quaternion.slerp(_targetQuat, t);
+    }
+}
+
+/**
+ * Horizontal decals (puddles): parent aligns Y to terrain normal; child uses rotation.x = −π/2.
+ */
+export function applyPuddleAnchor(anchor, surfaceYaw = 0, footOffset = 0) {
+    const x = anchor.position.x;
+    const z = anchor.position.z;
+    const groundY = sampleTerrainHeight(x, z);
+    const normal = sampleTerrainNormal(x, z);
+
+    anchor.position.set(x, groundY, z);
+    if (footOffset !== 0) {
+        anchor.position.addScaledVector(normal, footOffset);
+    }
+
+    anchor.quaternion.setFromUnitVectors(_worldUp, normal);
+
+    const mesh = anchor.children[0];
+    if (mesh) {
+        mesh.rotation.set(-Math.PI / 2, 0, surfaceYaw);
+    }
+}
+
+export function yawFromObject(object) {
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(object.quaternion);
+    return Math.atan2(forward.x, forward.z);
 }
 
 /** XZ distance from a point to an axis-aligned box (0 when inside on XZ). */
@@ -52,6 +140,56 @@ export function clampPositionToArena(position, radius = PLAY_RADIUS, margin = 0.
         position.z *= scale;
     }
     applyTerrainHeight(position, footOffset);
+}
+
+/** Distance from hard arena edge (positive = room left before clamp). */
+export function clearanceFromArenaEdge(x, z, radius = PLAY_RADIUS, margin = 0.55) {
+    const limit = radius - margin;
+    return limit - Math.hypot(x, z);
+}
+
+/**
+ * Blend movement direction away from the fence so rats don't bee-line into the border.
+ */
+export function deflectDirFromArenaEdge(x, z, dirX, dirZ, radius = PLAY_RADIUS, softMargin = ARENA_EDGE_MARGIN) {
+    const dist = Math.hypot(x, z);
+    if (dist < 1e-5) return { x: dirX, z: dirZ };
+
+    const limit = radius - 0.55;
+    const edgeStart = limit - softMargin;
+    if (dist < edgeStart) return { x: dirX, z: dirZ };
+
+    const outwardX = x / dist;
+    const outwardZ = z / dist;
+    const inwardX = (YARD_CENTER_X - x);
+    const inwardZ = (YARD_CENTER_Z - z);
+    const inwardLen = Math.hypot(inwardX, inwardZ) || 1;
+    const inX = inwardX / inwardLen;
+    const inZ = inwardZ / inwardLen;
+
+    const t = THREE.MathUtils.clamp((dist - edgeStart) / Math.max(softMargin, 0.01), 0, 1);
+    const outDot = dirX * outwardX + dirZ * outwardZ;
+    let dx = dirX;
+    let dz = dirZ;
+    if (outDot > 0) {
+        dx -= outwardX * outDot * t;
+        dz -= outwardZ * outDot * t;
+    }
+    dx = dx * (1 - t * 0.35) + inX * (t * 0.65);
+    dz = dz * (1 - t * 0.35) + inZ * (t * 0.65);
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-5) return { x: inX, z: inZ };
+    return { x: dx / len, z: dz / len };
+}
+
+export function nudgePointFromArenaEdge(point, radius = PLAY_RADIUS, softMargin = ARENA_EDGE_MARGIN) {
+    const clear = clearanceFromArenaEdge(point.x, point.z, radius);
+    if (clear > softMargin * 0.5) return point;
+    const t = THREE.MathUtils.clamp(1 - clear / (softMargin * 0.5), 0, 1);
+    point.x = THREE.MathUtils.lerp(point.x, YARD_CENTER_X, t * 0.45);
+    point.z = THREE.MathUtils.lerp(point.z, YARD_CENTER_Z, t * 0.45);
+    clampPositionToArena(point);
+    return point;
 }
 
 /** Push overlapping dynamic spheres apart on XZ. */

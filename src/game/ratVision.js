@@ -3,6 +3,32 @@ import * as THREE from 'three';
 const _forward = new THREE.Vector3();
 const _toTarget = new THREE.Vector3();
 
+/** Forward on XZ from heading yaw (matches rat rotateTowards / applyTerrainPose). */
+export function forwardFromHeadingYaw(yaw) {
+    _forward.set(Math.sin(yaw), 0, Math.cos(yaw));
+    return _forward;
+}
+
+export function isPointInVisionConeFromYaw(
+    ratPosition,
+    headingYaw,
+    targetPoint,
+    range = 4,
+    halfAngleDeg = 52
+) {
+    _toTarget.subVectors(targetPoint, ratPosition);
+    _toTarget.y = 0;
+    const dist = _toTarget.length();
+    if (dist > range || dist < 0.05) return false;
+
+    _toTarget.multiplyScalar(1 / dist);
+    forwardFromHeadingYaw(headingYaw);
+
+    const effectiveHalf = effectiveVisionHalfAngle(dist, halfAngleDeg);
+    const minDot = Math.cos(THREE.MathUtils.degToRad(effectiveHalf));
+    return _forward.dot(_toTarget) >= minDot;
+}
+
 /**
  * Forward-facing vision cone on XZ (rat local +Z).
  */

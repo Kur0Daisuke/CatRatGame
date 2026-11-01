@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { sampleTerrainHeight } from '../core/collision.js';
+import { triggerKillPanic } from '../game/ratKillPanic.js';
 
-const POUNCE_RANGE = 2.35;
+const POUNCE_RANGE = 2.85;
+const POUNCE_ARM_DELAY = 0.78;
+const POUNCE_AIM_HALF_ANGLE_DEG = 48;
+const POUNCE_AIM_MIN_DOT = Math.cos((POUNCE_AIM_HALF_ANGLE_DEG * Math.PI) / 180);
 const LEAP_DURATION = 0.42;
 const PIN_DURATION = 0.38;
 const CAMERA_BLEND = 7.5;
@@ -14,11 +18,12 @@ const QTE_BY_KIND = {
 };
 
 export class PounceSystem {
-    constructor({ camera, renderer, player, rats }) {
+    constructor({ camera, renderer, player, rats, eatVfx = null }) {
         this.camera = camera;
         this.renderer = renderer;
         this.player = player;
         this.rats = rats;
+        this.eatVfx = eatVfx;
 
         this.state = 'idle';
         this.targetRat = null;
@@ -39,7 +44,11 @@ export class PounceSystem {
         this._camLook = new THREE.Vector3();
         this._side = new THREE.Vector3();
         this._behind = new THREE.Vector3();
-
+        this._aimDir = new THREE.Vector3();
+        this._toRat = new THREE.Vector3();
+        this.aimYaw = 0;
+        this.promptCharge = 0;
+        this.promptTarget = null;
         this.buildUI();
         this.bindInput();
     }
@@ -118,15 +127,46 @@ export class PounceSystem {
         };
     }
 
+    /** Cat must be looking toward the rat (camera yaw on XZ). */
+    isRatInAim(rat) {
+        const playerPos = this.player.container.position;
+        const ratPos = rat.ratContainer.position;
+        this._toRat.set(ratPos.x - playerPos.x, 0, ratPos.z - playerPos.z);
+        const dist = this._toRat.length();
+        if (dist < 0.05 || dist > POUNCE_RANGE) return false;
+        this._toRat.multiplyScalar(1 / dist);
+        this._aimDir.set(-Math.sin(this.aimYaw), 0, -Math.cos(this.aimYaw));
+        return this._toRat.dot(this._aimDir) >= POUNCE_AIM_MIN_DOT;
+    }
+
     findPounceableRat() {
         const playerPos = this.player.container.position;
         let closest = null;
+        let bestDot = POUNCE_AIM_MIN_DOT - 0.001;
         let closestDist = POUNCE_RANGE;
         for (const rat of this.rats) {
             if (!rat.canBePounced()) continue;
             const dist = playerPos.distanceTo(rat.ratContainer.position);
-            if (dist <= closestDist) {
+            if (dist > POUNCE_RANGE) continue;
+            this._toRat.set(
+                rat.ratContainer.position.x - playerPos.x,
+                0,
+                rat.ratContainer.position.z - playerPos.z
+            );
+            if (this._toRat.lengthSq() < 1e-4) {
+                if (dist < closestDist) {
+                    closest = rat;
+                    closestDist = dist;
+                }
+                continue;
+            }
+            this._toRat.normalize();
+            this._aimDir.set(-Math.sin(this.aimYaw), 0, -Math.cos(this.aimYaw));
+            const dot = this._toRat.dot(this._aimDir);
+            if (dot < POUNCE_AIM_MIN_DOT) continue;
+            if (dot > bestDot || (dot === bestDot && dist < closestDist)) {
                 closest = rat;
+                bestDot = dot;
                 closestDist = dist;
             }
         }
@@ -136,13 +176,16 @@ export class PounceSystem {
     tryStart() {
         if (this.player.isStunned || this.player.isRecovering || this.player.isLocked) return;
         const rat = this.findPounceableRat();
-        if (!rat) return;
+        if (!rat || !this.isRatInAim(rat)) return;
+        if (this.promptCharge < POUNCE_ARM_DELAY) return;
 
         this.targetRat = rat;
         this.state = 'leaping';
         this.elapsed = 0;
         this.resolved = false;
         this.hidePrompt();
+        interruptRatConversation(rat);
+        onCatAttacksRat(rat, this.player.container.position, this.rats);
         rat.beginPin();
         rat.markAlerted?.(5);
         this.player.beginLeap(this.landingSpot(rat), LEAP_DURATION);
@@ -161,8 +204,9 @@ export class PounceSystem {
         );
     }
 
-    update(delta) {
-        this.updatePrompt();
+    update(delta, aimYaw = 0) {
+        this.aimYaw = aimYaw;
+        this.updatePrompt(delta);
 
         if (this.state === 'idle') return;
 
@@ -285,6 +329,8 @@ export class PounceSystem {
             this.scoreEl.classList.remove('pulse');
             void this.scoreEl.offsetWidth;
             this.scoreEl.classList.add('pulse');
+            triggerKillPanic(rat, this.player.container.position, this.rats);
+            this.eatVfx?.spawnFromRat(rat);
             this.state = 'consuming';
             this.elapsed = 0;
             rat.beginConsume();
@@ -300,6 +346,7 @@ export class PounceSystem {
     }
 
     finishConsume(rat) {
+        this.eatVfx?.spawnFromRat(rat);
         const index = this.rats.indexOf(rat);
         if (index >= 0) this.rats.splice(index, 1);
         rat.dispose();
@@ -327,39 +374,61 @@ export class PounceSystem {
         this.camera.lookAt(this._camLook);
     }
 
-    updatePrompt() {
+    updatePrompt(delta = 0.016) {
+        this.player.pounceAimRat = null;
+        this.player.pounceAimCharge = 0;
+
         if (this.isActive() || this.player.isStunned || this.player.isRecovering) {
             this.hidePrompt();
+            this.promptCharge = 0;
+            this.promptTarget = null;
             return;
         }
 
         const rat = this.findPounceableRat();
+        const inAim = rat && this.isRatInAim(rat);
+        if (!inAim) {
+            this.promptCharge = 0;
+            this.promptTarget = null;
+            this.hidePrompt();
+            return;
+        }
+
+        if (this.promptTarget !== rat) {
+            this.promptTarget = rat;
+            this.promptCharge = 0;
+        }
+        this.promptCharge = Math.min(POUNCE_ARM_DELAY, this.promptCharge + delta);
+        this.player.pounceAimRat = rat;
+        this.player.pounceAimCharge = this.promptCharge;
+        const ready = this.promptCharge >= POUNCE_ARM_DELAY;
+
         this.promptRat = rat;
-        if (!rat) {
-            this.hidePrompt();
-            return;
-        }
-
-        this._world.copy(rat.ratContainer.position);
-        this._world.y += 0.95;
-        this._world.applyMatrix4(this.camera.matrixWorldInverse);
-        if (this._world.z > -0.15) {
-            this.hidePrompt();
-            return;
-        }
-
         this._screen.copy(rat.ratContainer.position);
         this._screen.y += 0.95;
         this._screen.project(this.camera);
+        if (this._screen.z > 1) {
+            this.hidePrompt();
+            return;
+        }
         const x = (this._screen.x * 0.5 + 0.5) * window.innerWidth;
         const y = (-this._screen.y * 0.5 + 0.5) * window.innerHeight;
         this.promptEl.hidden = false;
+        const pct = Math.round((this.promptCharge / POUNCE_ARM_DELAY) * 100);
+        if (ready) {
+            this.promptEl.innerHTML = '<span class="pounce-prompt-key">E</span>';
+            this.promptEl.classList.remove('pounce-prompt-charging');
+        } else {
+            this.promptEl.innerHTML = `<span class="pounce-prompt-key pounce-prompt-wait">${pct}%</span>`;
+            this.promptEl.classList.add('pounce-prompt-charging');
+        }
         this.promptEl.style.transform = `translate(${x}px, ${y}px) translate(-50%, -120%)`;
     }
 
     hidePrompt() {
         this.promptEl.hidden = true;
         this.promptRat = null;
+        this.promptEl.classList.remove('pounce-prompt-charging');
     }
 
     showToast(text, kind) {

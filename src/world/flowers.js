@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PLAY_RADIUS } from '../core/worldBounds.js';
+import { applyTerrainPose } from '../core/collision.js';
 
 const FLOWER_MODEL = '/models/purple_flower_patch.glb';
 
@@ -40,8 +41,9 @@ export function scatterFlowers(scene, terrain, count = 140) {
                 const flower = template.clone(true);
                 const scale = 0.35 + Math.random() * 0.45;
                 flower.scale.setScalar(scale);
-                flower.rotation.y = Math.random() * Math.PI * 2;
-                flower.position.set(x, y, z);
+                const flowerYaw = Math.random() * Math.PI * 2;
+                flower.position.set(x, 0, z);
+                applyTerrainPose(flower, flowerYaw, 0);
                 group.add(flower);
                 placed++;
             }

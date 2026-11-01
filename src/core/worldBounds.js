@@ -1,6 +1,13 @@
 /** Player/rats/clutter stay inside this radius (well before the fence ring). */
 export const PLAY_RADIUS = 40;
 
+/** Main garden focus — rats steer inward toward here near the edge. */
+export const YARD_CENTER_X = 15;
+export const YARD_CENTER_Z = 15;
+
+/** Soft band before hard clamp where rats pick alternate paths. */
+export const ARENA_EDGE_MARGIN = 3.2;
+
 /** Wooden fence ring — outside the playable limit. */
 export const FENCE_RADIUS = 46;
 

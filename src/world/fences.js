@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FENCE_RADIUS } from '../core/worldBounds.js';
+import { applyTerrainPose } from '../core/collision.js';
 
 export function buildBorderFences(scene, terrain) {
     const group = new THREE.Group();
@@ -20,8 +21,8 @@ export function buildBorderFences(scene, terrain) {
         points.push(new THREE.Vector3(x, y, z));
 
         const post = new THREE.Mesh(postGeo, postMat);
-        post.position.set(x, y + 0.52, z);
-        post.rotation.y = -t + Math.PI * 0.5;
+        post.position.set(x, y, z);
+        applyTerrainPose(post, -t + Math.PI * 0.5, 0.525);
         post.castShadow = true;
         post.receiveShadow = true;
         group.add(post);

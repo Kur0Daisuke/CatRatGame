@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { isInsideFencedYard, randomPointInDisk, YARD_SPAWN_RADIUS } from '../core/worldBounds.js';
 import { isClearOfPuddles } from './puddles.js';
+import { applyTerrainPose } from '../core/collision.js';
 
 const BUSH_PUDDLE_CLEARANCE = 1.85;
 
 export function loadBushes(scene, terrain = null, puddles = []) {
     const loader = new GLTFLoader();
     const bushes = [];
-    const heightAt = (x, z) => (terrain ? terrain.getHeightAt(x, z) : 0);
 
     loader.load('/bush.glb', (gltf) => {
         const totalBushes = 520;
@@ -45,11 +45,12 @@ export function loadBushes(scene, terrain = null, puddles = []) {
             if (!placed) continue;
 
             const bushInstance = gltf.scene.clone();
-            bushInstance.position.set(randomPosX, heightAt(randomPosX, randomPosZ), randomPosZ);
+            const bushYaw = Math.random() * Math.PI * 2;
+            bushInstance.position.set(randomPosX, 0, randomPosZ);
 
             const bushSize = 0.25 + Math.random() * 0.35;
             bushInstance.scale.set(bushSize, bushSize, bushSize);
-            bushInstance.rotation.y = Math.random() * Math.PI * 2;
+            applyTerrainPose(bushInstance, bushYaw, 0);
 
             bushInstance.traverse((child) => {
                 if (child.isMesh) child.castShadow = true;

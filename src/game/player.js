@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Entity } from '../core/entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainHeight, sampleTerrainHeight } from '../core/collision.js';
+import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainPose, sampleTerrainHeight } from '../core/collision.js';
 import { computeCatSourceDecibels } from '../systems/catSound.js';
 import { findPuddleAtPosition } from '../world/puddles.js';
 
@@ -58,6 +58,10 @@ export class Player {
         this.stunEntryProgress = 0; 
         this.isRecovering = false;
         this.recoveryProgress = 0;
+        this.confuseTimer = 0;
+        this.confuseStrength = 0;
+        this.confuseLookDrift = 0;
+        this.confuseScrambleTimer = 0;
 
         // Bush Stealth & Sound Flags
         this.hiddenInBush = false;
@@ -78,6 +82,15 @@ export class Player {
         this.leapDuration = 0.42;
         this.leapFrom = new THREE.Vector3();
         this.leapTo = new THREE.Vector3();
+        this.leapArcHeight = 0.95;
+        this.headingYaw = 0;
+
+        this.catVfx = null;
+        this._prevTargetBushBlend = 0;
+        this._bushEffectInside = false;
+
+        this.pounceAimRat = null;
+        this.pounceAimCharge = 0;
 
         this.initControls();
         this.loadModel();
@@ -172,6 +185,14 @@ export class Player {
         }
     }
 
+    /** Pouncer feints — scrambled movement and camera drift, not a full flip stun. */
+    confuse(duration = 1.1, strength = 0.85) {
+        if (!this.isDeployed || this.isLocked) return;
+        if (this.isStunned || this.isRecovering) return;
+        this.confuseTimer = Math.max(this.confuseTimer, duration);
+        this.confuseStrength = Math.max(this.confuseStrength, strength);
+    }
+
     beginLeap(targetPos, duration = 0.42) {
         this.isLocked = true;
         this.leapActive = true;
@@ -198,7 +219,12 @@ export class Player {
         this.leapElapsed += delta;
         const t = Math.min(this.leapElapsed / this.leapDuration, 1);
         const eased = t * t * (3 - 2 * t);
-        this.container.position.lerpVectors(this.leapFrom, this.leapTo, eased);
+
+        const x = THREE.MathUtils.lerp(this.leapFrom.x, this.leapTo.x, eased);
+        const z = THREE.MathUtils.lerp(this.leapFrom.z, this.leapTo.z, eased);
+        const groundY = sampleTerrainHeight(x, z);
+        const arc = Math.sin(t * Math.PI) * this.leapArcHeight;
+        this.container.position.set(x, groundY + arc, z);
         clampPositionToArena(this.container.position);
 
         const dx = this.leapTo.x - this.leapFrom.x;
@@ -214,12 +240,13 @@ export class Player {
         }
 
         if (this.carModel) {
-            this.carModel.position.y = Math.sin(t * Math.PI) * 1.15;
+            this.carModel.position.y = Math.sin(t * Math.PI) * 0.35;
             this.carModel.rotation.z = 0;
         }
 
         if (t >= 1) {
             this.leapActive = false;
+            applyTerrainPose(this.container, this.headingYaw, 0, null);
             if (this.carModel) this.carModel.position.y = 0;
         }
     }
@@ -242,6 +269,22 @@ export class Player {
         const bushLerp = 1 - Math.exp(-10 * delta);
         this.bushBlend = THREE.MathUtils.lerp(this.bushBlend, this.targetBushBlend, bushLerp);
         this.hiddenInBush = this.bushBlend > 0.52;
+
+        if (this.catVfx && this.isDeployed) {
+            const cur = this.targetBushBlend;
+            const prev = this._prevTargetBushBlend ?? 0;
+            const THRESH = 0.22;
+
+            if (prev < THRESH && cur >= THRESH) {
+                this.catVfx.spawnBushLeaves(bodyCenter, Math.max(0.55, cur));
+            } else if (prev >= THRESH && cur < THRESH) {
+                this.catVfx.spawnBushLeaves(bodyCenter, Math.max(0.45, prev));
+            }
+
+            this._prevTargetBushBlend = cur;
+            this._bushEffectInside = cur >= THRESH;
+        }
+
         this.sightSphere.radius = THREE.MathUtils.lerp(
             this.baseAerialRadius,
             0.15,
@@ -275,7 +318,37 @@ export class Player {
         this.soundDecibel = computeCatSourceDecibels(this, this.soundTime);
 
         if (this.leapActive || this.isLocked) {
+            if (!this.leapActive) {
+                applyTerrainPose(this.container, this.headingYaw, 0, delta);
+            }
             return;
+        }
+
+        if (this.confuseTimer > 0) {
+            this.confuseTimer = Math.max(0, this.confuseTimer - delta);
+            this.confuseScrambleTimer -= delta;
+            const s = this.confuseStrength * (this.confuseTimer > 0 ? 1 : 0);
+            this.confuseLookDrift = Math.sin(this.soundTime * 13.5) * 0.038 * s;
+            if (this.confuseScrambleTimer <= 0) {
+                this.confuseScrambleTimer = 0.12 + Math.random() * 0.18;
+                if (Math.random() < 0.45 * s) {
+                    const tx = this.walkDirectionX;
+                    this.walkDirectionX = this.walkDirectionZ;
+                    this.walkDirectionZ = tx;
+                }
+                if (Math.random() < 0.35 * s) {
+                    this.walkDirectionX *= -1;
+                }
+                if (Math.random() < 0.35 * s) {
+                    this.walkDirectionZ *= -1;
+                }
+            }
+            if (this.confuseTimer <= 0) {
+                this.confuseStrength = 0;
+                this.confuseLookDrift = 0;
+            }
+        } else {
+            this.confuseLookDrift = 0;
         }
 
         if (this.isStunned) {
@@ -317,8 +390,9 @@ export class Player {
             return; 
         }
 
-        const forwardX = -Math.sin(cameraYaw);
-        const forwardZ = -Math.cos(cameraYaw);
+        const aimYaw = cameraYaw + (this.confuseTimer > 0 ? this.confuseLookDrift * 2.2 : 0);
+        const forwardX = -Math.sin(aimYaw);
+        const forwardZ = -Math.cos(aimYaw);
         const rightX = -forwardZ;
         const rightZ = forwardX;
         const inputForward = -this.walkDirectionZ;
@@ -326,18 +400,28 @@ export class Player {
         let moveX = forwardX * inputForward + rightX * inputRight;
         let moveZ = forwardZ * inputForward + rightZ * inputRight;
         const moveLen = Math.hypot(moveX, moveZ);
+        let targetYaw = this.headingYaw;
         if (moveLen > 0) {
             moveX /= moveLen;
             moveZ /= moveLen;
+            targetYaw = Math.atan2(moveX, moveZ);
+        } else {
+            targetYaw = Math.atan2(forwardX, forwardZ);
         }
+        let yawDelta = targetYaw - this.headingYaw;
+        while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
+        while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
+        const turnT = 1 - Math.exp(-12 * delta);
+        this.headingYaw += yawDelta * turnT;
 
-        let moveDirection = new THREE.Vector3(moveX, 0, moveZ);
+        let moveDirection = new THREE.Vector3(
+            moveLen > 0 ? moveX : 0,
+            0,
+            moveLen > 0 ? moveZ : 0
+        );
         
         if (moveDirection.lengthSq() > 0) {
             moveDirection.normalize();
-            this.tempMatrix.lookAt(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-moveX, 0, -moveZ), new THREE.Vector3(0, 1, 0));
-            this.targetQuaternion.setFromRotationMatrix(this.tempMatrix);
-
             this.translationX += 0.04;
             this.translationY += 0.08;
             this.stoppedMoving = true;
@@ -352,8 +436,6 @@ export class Player {
         if (Math.sin(this.translationX) >= 0.1 || Math.sin(this.translationX) <= -0.1) {
             this.translationX += 0.04;
         }
-
-        this.container.quaternion.slerp(this.targetQuaternion, this.slerpSpeed);
 
         if (this.carModel) {
             this.carModel.rotation.z = Math.sin(this.translationX) * 2 * delta;
@@ -382,6 +464,6 @@ export class Player {
             );
         }
 
-        applyTerrainHeight(this.container.position);
+        applyTerrainPose(this.container, this.headingYaw, 0, delta);
     }
 }

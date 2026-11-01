@@ -20,9 +20,9 @@ export function createMenu({ player, onStart }) {
         </section>
         <aside class="rat-guide" aria-labelledby="guide-title">
             <p class="eyebrow">FIELD NOTES / 03 TYPES</p><h2 id="guide-title">Meet the locals.</h2>
-            <article><span class="rat-number">01</span><div><h3>Dumb rat <span>THE EASY ONE</span></h3><p>Flees in a straight line. Follow quietly and land a forgiving skill check.</p></div></article>
-            <article><span class="rat-number">02</span><div><h3>Scout rat <span>THE QUICK ONE</span></h3><p>Zigzags to shake you off. Get close, then be ready for a faster, narrower skill check.</p></div></article>
-            <article><span class="rat-number">03</span><div><h3>Pouncer rat <span>THE BOLD ONE</span></h3><p>Jumps at you and can stun you. Watch your approach and time your pounce.</p></div></article>
+            <article><span class="rat-number">01</span><div><h3>Dumb rat <span>THE EASY ONE</span></h3><p>Slow to react and bad at picking a direction. Easiest to catch — often huddled near pouncers.</p></div></article>
+            <article><span class="rat-number">02</span><div><h3>Scout rat <span>THE WATCHER</span></h3><p>Wide vision and constant scanning. Marks the cat’s last seen spot so others steer clear for a while.</p></div></article>
+            <article><span class="rat-number">03</span><div><h3>Pouncer rat <span>THE GUARD</span></h3><p>Reads the yard fast, stuns up close, then bolts. Only rats nearby get the warning.</p></div></article>
             <div class="field-tip"><span>HUNTER'S TIP</span>Keep the noise down. Drink from puddles to recover stamina.</div>
         </aside>
         <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · CTRL sneak · E pounce · SPACE skill check · ESC settings</span></footer>`;

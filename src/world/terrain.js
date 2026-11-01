@@ -46,6 +46,15 @@ export class Terrain {
         return Math.max(h, 0.08);
     }
 
+    /** Unit up-vector for the deformed heightfield at (x, z). */
+    getNormalAt(x, z, eps = 0.38) {
+        const dhdx =
+            (this.getHeightAt(x + eps, z) - this.getHeightAt(x - eps, z)) / (2 * eps);
+        const dhdz =
+            (this.getHeightAt(x, z + eps) - this.getHeightAt(x, z - eps)) / (2 * eps);
+        return new THREE.Vector3(-dhdx, 1, -dhdz).normalize();
+    }
+
     build(scene, renderer, grassTexture) {
         const geometry = new THREE.PlaneGeometry(this.size, this.size, this.segments, this.segments);
         geometry.rotateX(-Math.PI / 2);
