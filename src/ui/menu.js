@@ -1,3 +1,4 @@
+import { renderHighScoresHtml } from '../systems/highScores.js';
 import * as THREE from 'three';
 import { CAT_MODELS } from '../game/player.js';
 
@@ -9,7 +10,7 @@ export function createMenu({ player, onStart }) {
         <section class="menu-content" aria-labelledby="menu-title">
             <p class="eyebrow">THE GARDEN IS ALIVE</p>
             <h1 id="menu-title">Quiet paws.<br><em>Big trouble.</em></h1>
-            <p class="menu-intro">Pick your cat. Know your rivals. Make an entrance.</p>
+            <p class="menu-intro">Catch 30 of the 50 rats before you run out of time or lives. You start with nine — lose one each time the dog’s skill check begins.</p>
             <div class="cat-picker">
                 <div class="section-heading"><h2>01 / CHOOSE YOUR CAT</h2><span class="selected-cat">Original</span></div>
                 <div class="cat-preview" aria-label="Selected cat model preview"></div>
@@ -18,16 +19,19 @@ export function createMenu({ player, onStart }) {
             <button class="start-game" type="button" disabled><span>LOADING YOUR CAT…</span><span aria-hidden="true">↗</span></button>
             <p class="menu-status" role="status">Getting your paws ready.</p>
         </section>
-        <aside class="rat-guide" aria-labelledby="guide-title">
-            <p class="eyebrow">FIELD NOTES / THE YARD</p><h2 id="guide-title">Meet the locals.</h2>
-            <article><span class="rat-number">01</span><div><h3>Dumb rat <span>THE EASY ONE</span></h3><p>Slow to react and bad at picking a direction. Easiest to catch — often huddled near pouncers.</p></div></article>
-            <article><span class="rat-number">02</span><div><h3>Scout rat <span>THE WATCHER</span></h3><p>Finds the dog and reports your exact spot. Until a scout delivers that, the dog only wanders.</p></div></article>
-            <article><span class="rat-number">03</span><div><h3>Pouncer rat <span>THE GUARD</span></h3><p>Reads the yard fast, stuns up close, then bolts. Only rats nearby get the warning.</p></div></article>
-            <article><span class="rat-number">04</span><div><h3>Shiba <span>THE HUNTER</span></h3><p>Starts on the far side of the yard and can see you, the way the rats do. Scouts still run over and report your exact spot. If it grabs you, hit SPACE in the zone. Succeed and it is stunned for five seconds.</p></div></article>
-            <div class="field-tip"><span>HUNTER'S TIP</span>Keep the noise down. Drink from puddles to recover stamina. Slip the dog with the SPACE skill check.</div>
+        <aside class="rat-guide high-scores-panel" aria-labelledby="guide-title">
+            <p class="eyebrow">FIELD NOTES / HIGH SCORES</p>
+            <h2 id="guide-title">Fastest clears.</h2>
+            <div class="high-scores-body"></div>
+            <div class="field-tip"><span>THE HUNT</span>Timer runs from landing until you hit 30 catches. Fastest clears with more lives left rank higher.</div>
         </aside>
-        <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · C sneak · E pounce · SPACE skill check · ESC settings</span></footer>`;
+            <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · C sneak · E pounce · F tree climb · SPACE skill check · ESC settings</span></footer>`;
     document.body.appendChild(root);
+    const scoresBody = root.querySelector('.high-scores-body');
+    function refreshHighScores() {
+        if (scoresBody) scoresBody.innerHTML = renderHighScoresHtml();
+    }
+    refreshHighScores();
     const start = root.querySelector('.start-game');
     const status = root.querySelector('.menu-status');
     const buttons = [...root.querySelectorAll('[data-cat]')];
@@ -102,6 +106,7 @@ export function createMenu({ player, onStart }) {
             if (root.hidden) return;
             if (model) model.rotation.y += delta * 0.22;
             renderer.render(preview, camera);
-        }
+        },
+        refreshHighScores
     };
 }

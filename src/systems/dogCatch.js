@@ -23,12 +23,14 @@ const DOG_QTE = { speed: 0.94, zoneWidth: 0.16, speedJitter: 0.08 };
  * Clearing every round stuns the dog for 5 seconds.
  */
 export class DogCatchSystem {
-    constructor({ camera, renderer, player, dog, isPounceActive }) {
+    constructor({ camera, renderer, player, dog, isPounceActive, onQteStart, isHuntEnded }) {
         this.camera = camera;
         this.renderer = renderer;
         this.player = player;
         this.dog = dog;
         this.isPounceActive = isPounceActive ?? (() => false);
+        this.onQteStart = onQteStart ?? null;
+        this.isHuntEnded = isHuntEnded ?? (() => false);
 
         this.state = 'idle';
         this.elapsed = 0;
@@ -139,6 +141,12 @@ export class DogCatchSystem {
     }
 
     beginQte() {
+        this.onQteStart?.();
+        if (this.isHuntEnded()) {
+            this.abort();
+            return;
+        }
+
         const rounds = 3 + Math.floor(Math.random() * 3);
         const speedMul = 1 + (Math.random() * 2 - 1) * DOG_QTE.speedJitter;
         this.qteConfig = {

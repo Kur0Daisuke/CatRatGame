@@ -34,6 +34,8 @@ import { createBushCoverDebug } from './world/bushCoverDebug.js';
 import { Dog } from './game/dog.js';
 import { setHuntDog } from './game/huntDog.js';
 import { DogCatchSystem } from './systems/dogCatch.js';
+import { TreeClimbSystem } from './systems/treeClimb.js';
+import { createHuntSession } from './systems/huntSession.js';
 
 
 
@@ -85,6 +87,8 @@ const bushes = environment.bushes || [];
 
 const puddles = environment.puddles || [];
 
+const trees = environment.trees || [];
+
 const look = { yaw: 0, pitch: 0.54 };
 
 const cameraDistance = 6.6;
@@ -101,13 +105,8 @@ const pounce = new PounceSystem({ camera, renderer, player, rats, eatVfx });
 
 const dog = new Dog(scene, player.container.position.x, player.container.position.z);
 setHuntDog(dog);
-const dogCatch = new DogCatchSystem({
-    camera,
-    renderer,
-    player,
-    dog,
-    isPounceActive: () => pounce.isActive()
-});
+
+const treeClimb = new TreeClimbSystem({ player, trees, camera });
 
 const soundVisual = new CatSoundVisual(scene);
 
@@ -129,7 +128,7 @@ const bushCoverHud = createBushCoverHud();
 const hudStats = document.createElement('div');
 hudStats.className = 'hud-stats';
 hud.appendChild(hudStats);
-hudStats.append(pounce.scoreEl, bushCoverHud.el);
+hudStats.append(pounce.scoreEl, bushCoverHud.el, treeClimb.hudEl);
 
 const bushVignette = createBushVignette();
 const bushCoverDebug = createBushCoverDebug(scene, () => bushes);
@@ -156,7 +155,10 @@ function refillRats() {
 
 function startDrop() {
     pounce.cancelForReset();
+    treeClimb.cancelForReset();
     dogCatch.abort();
+    huntSession.hideOverlay();
+    huntSession.reset();
     if (huntStarted) refillRats();
     huntStarted = true;
     player.prepareDrop(15, 15);
@@ -177,7 +179,10 @@ function startDrop() {
 
 function returnToMenu() {
     pounce.cancelForReset();
+    treeClimb.cancelForReset();
     dogCatch.abort();
+    huntSession.reset();
+    huntSession.hideOverlay();
     phase = 'menu';
     document.body.dataset.phase = phase;
     player.container.visible = false;
@@ -190,7 +195,7 @@ function returnToMenu() {
 const settings = createSettings({
     rats,
     onChange(open) {
-        player.setControlsBlocked(open || phase !== 'playing');
+        player.setControlsBlocked(open || phase !== 'playing' || huntSession.isEnded());
         document.body.classList.toggle('settings-open', open);
     },
     onRestart() {
@@ -205,9 +210,48 @@ const settings = createSettings({
 
 const menu = createMenu({ player, onStart() { startDrop(); } });
 
+function selectedCatLabel() {
+    const pressed = document.querySelector('.cat-option[aria-pressed="true"]');
+    return pressed?.textContent?.trim() || 'Cat';
+}
+
+const huntSession = createHuntSession({
+    getCatLabel: selectedCatLabel,
+    onEnd() {
+        player.setControlsBlocked(true);
+        dogCatch.abort();
+        menu.refreshHighScores();
+    }
+});
+
+huntSession.setHandlers({
+    onRetry() {
+        settings.setOpen(false);
+        startDrop();
+    },
+    onMenu() {
+        settings.setOpen(false);
+        returnToMenu();
+    }
+});
+
+pounce.onRatEliminated = (remaining) => huntSession.setRatsRemaining(remaining);
+
+const dogCatch = new DogCatchSystem({
+    camera,
+    renderer,
+    player,
+    dog,
+    isPounceActive: () => pounce.isActive() || huntSession.isEnded(),
+    isHuntEnded: () => huntSession.isEnded(),
+    onQteStart: () => huntSession.loseLifeFromDog()
+});
+
+hudStats.prepend(huntSession.livesEl);
+hudStats.prepend(huntSession.timerEl);
 window.addEventListener('keydown', event => {
 
-        if (event.code === 'Escape' && phase !== 'menu' && !event.repeat && !dogCatch.isActive()) {
+        if (event.code === 'Escape' && phase !== 'menu' && !event.repeat && !dogCatch.isActive() && !huntSession.isEnded()) {
 
         event.preventDefault();
 
@@ -225,7 +269,7 @@ window.addEventListener('keydown', event => {
 
 document.addEventListener('pointerlockchange', () => {
 
-    if (!document.pointerLockElement && phase === 'playing' && !pounce.isActive() && !dogCatch.isActive() && !settings.isOpen) {
+    if (!document.pointerLockElement && phase === 'playing' && !pounce.isActive() && !dogCatch.isActive() && !settings.isOpen && !huntSession.isEnded()) {
 
         pointerUnlockTime = performance.now();
 
@@ -237,7 +281,7 @@ document.addEventListener('pointerlockchange', () => {
 
 window.addEventListener('mousemove', event => {
 
-    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera() || dogCatch.controlsCamera()) return;
+    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera() || dogCatch.controlsCamera() || huntSession.isEnded()) return;
 
     const sensitivity = document.pointerLockElement === renderer.domElement ? 0.0026 : 0.004;
 
@@ -249,7 +293,7 @@ window.addEventListener('mousemove', event => {
 
 renderer.domElement.addEventListener('click', () => {
 
-    if (phase !== 'playing' || settings.isOpen || pounce.isActive() || dogCatch.isActive()) return;
+    if (phase !== 'playing' || settings.isOpen || pounce.isActive() || dogCatch.isActive() || huntSession.isEnded()) return;
 
     renderer.domElement.requestPointerLock();
 
@@ -271,29 +315,37 @@ function animate(time) {
 
         if (phase === 'playing') {
 
-            player.update(delta, bushes, look.yaw, puddles);
-
-            if (player.confuseLookDrift) {
-                look.yaw += player.confuseLookDrift * delta * 2.4;
+            if (!huntSession.isEnded()) {
+                huntSession.update(delta);
             }
 
-            soundVisual.update(player, delta);
+            if (!huntSession.isEnded()) {
+                player.update(delta, bushes, look.yaw, puddles, trees);
 
-            staminaVisual.update(player);
+                treeClimb.update(delta);
 
-            staminaValue.textContent = `${Math.ceil(player.stamina)} / ${player.staminaMax}`;
+                if (player.confuseLookDrift) {
+                    look.yaw += player.confuseLookDrift * delta * 2.4;
+                }
 
-            pounce.update(delta, look.yaw);
+                soundVisual.update(player, delta);
 
-            eatVfx.update(delta);
+                staminaVisual.update(player);
 
-            catVfx.update(delta);
+                staminaValue.textContent = `${Math.ceil(player.stamina)} / ${player.staminaMax}`;
 
-            puddleWaves.update(delta, player, rats);
+                pounce.update(delta, look.yaw);
 
-            bushCoverHud.update(player);
-            bushVignette.update(player, delta, phase === 'playing' && !settings.isOpen);
-            bushCoverDebug.update();
+                eatVfx.update(delta);
+
+                catVfx.update(delta);
+
+                puddleWaves.update(delta, player, rats);
+
+                bushCoverHud.update(player);
+                bushVignette.update(player, delta, phase === 'playing' && !settings.isOpen);
+                bushCoverDebug.update();
+            }
 
         } else if (phase === 'dropping') {
 
@@ -338,6 +390,10 @@ function animate(time) {
                     player.bushCoverActive = false;
                     player._prevTargetBushBlend = 0;
 
+                    const total = rats.length;
+                    pounce.setRatTotal(total);
+                    huntSession.begin(total);
+
                 }
 
             }
@@ -349,7 +405,7 @@ function animate(time) {
         rats.forEach(rat => rat.update(delta));
         updateRatConversations(rats, delta, player.container.position);
         dog.update(delta, player, rats);
-        if (phase === 'playing') dogCatch.update(delta);
+        if (phase === 'playing' && !huntSession.isEnded()) dogCatch.update(delta);
 
     }
 
@@ -373,7 +429,7 @@ function animate(time) {
 
         camera.position.lerp(desired, 1 - Math.exp(-8 * delta));
 
-        lookTarget.set(focus.x, focus.y + 0.45, focus.z);
+        lookTarget.set(focus.x, focus.y + (player.isTreePerched ? 1.05 : 0.45), focus.z);
 
         camera.lookAt(lookTarget);
 

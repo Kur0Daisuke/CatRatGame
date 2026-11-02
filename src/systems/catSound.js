@@ -9,6 +9,13 @@ export const ATTENUATION_FACTOR = 40;
  * Source loudness at the cat (dB). Walk is usually quiet with occasional louder steps; run is loud.
  */
 export function computeCatSourceDecibels(player, timeSeconds) {
+    if (player.isTreePerched) {
+        return 4 + Math.sin(timeSeconds * 1.2) * 1.5;
+    }
+    if (player.isTreeClimbing) {
+        return 18 + Math.sin(timeSeconds * 8) * 6;
+    }
+
     const moving = player.isMoving || player.leapActive;
 
     if (!moving) {

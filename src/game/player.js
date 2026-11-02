@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Entity } from '../core/entity.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainPose, sampleTerrainHeight, isInBushCover, BUSH_COVER_EXIT } from '../core/collision.js';
+import { resolveTreeTrunkOverlapXZ } from '../world/trees.js';
 import { computeCatSourceDecibels } from '../systems/catSound.js';
 import { findPuddleAtPosition } from '../world/puddles.js';
 import { applyWalkBob, createWalkBob } from '../systems/walkBob.js';
@@ -91,6 +92,9 @@ export class Player {
 
         this.pounceAimRat = null;
         this.pounceAimCharge = 0;
+
+        this.isTreeClimbing = false;
+        this.isTreePerched = false;
 
         this.initControls();
         this.loadModel();
@@ -246,6 +250,8 @@ export class Player {
         this.bushBlend = 0;
         this.targetBushBlend = 0;
         this._prevTargetBushBlend = 0;
+        this.isTreeClimbing = false;
+        this.isTreePerched = false;
         this.container.position.set(x, 0, z);
         this.container.visible = true;
         applyTerrainPose(this.container, 0, 0);
@@ -293,7 +299,7 @@ export class Player {
         }
     }
 
-    update(delta, bushes = [], cameraYaw = 0, puddles = []) {
+    update(delta, bushes = [], cameraYaw = 0, puddles = [], trees = []) {
         if (!this.aerialSphere || !this.sightSphere || !this.collisionSphere) return;
 
         if (this.leapActive) {
@@ -368,10 +374,14 @@ export class Player {
         this.soundTime += delta;
         this.soundDecibel = computeCatSourceDecibels(this, this.soundTime);
 
-        if (this.leapActive || this.isLocked) {
+        if (this.leapActive || (this.isLocked && !this.isTreeClimbing && !this.isTreePerched)) {
             if (!this.leapActive) {
                 applyTerrainPose(this.container, this.headingYaw, 0, delta);
             }
+            return;
+        }
+
+        if (this.isTreeClimbing || this.isTreePerched) {
             return;
         }
 
@@ -475,6 +485,13 @@ export class Player {
 
         this.container.position.x += moveX * this.speed * delta;
         this.container.position.z += moveZ * this.speed * delta;
+        clampPositionToArena(this.container.position);
+        resolveTreeTrunkOverlapXZ(
+            this.container.position,
+            this.collisionSphere.radius,
+            trees,
+            this.container.position
+        );
         clampPositionToArena(this.container.position);
 
         const rats = Entity.getEntitiesByType('entity');

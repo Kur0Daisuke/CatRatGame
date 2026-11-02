@@ -37,6 +37,8 @@ export function senseCat(rat, playerEntity, now) {
     const distance = ratPos.distanceTo(catCenter);
 
     const catHiddenInBush = playerEntity.bushCoverActive === true;
+    const catHiddenInTree = playerEntity.isTreePerched === true;
+    const catConcealed = catHiddenInBush || catHiddenInTree;
 
 
 
@@ -62,7 +64,7 @@ export function senseCat(rat, playerEntity, now) {
 
     let canSee = false;
 
-    if (!catHiddenInBush && distance <= visionRange + 0.5) {
+    if (!catConcealed && distance <= visionRange + 0.5) {
 
         canSee = isPointInVisionConeFromYaw(
 
@@ -101,7 +103,7 @@ export function senseCat(rat, playerEntity, now) {
 
 
     const proximity =
-        !catHiddenInBush &&
+        !catConcealed &&
         distance <= cfg.proximityRange &&
         (canSee || (canHear && perceivedDecibels >= hearThreshold + 4));
 
@@ -129,7 +131,7 @@ export function senseCat(rat, playerEntity, now) {
 
         canSee,
 
-        bushHidden: catHiddenInBush,
+        bushHidden: catConcealed,
 
         proximity,
 

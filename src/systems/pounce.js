@@ -3,6 +3,7 @@ import { sampleTerrainHeight } from '../core/collision.js';
 import { triggerKillPanic } from '../game/ratKillPanic.js';
 import { interruptRatConversation } from '../game/ratConversation.js';
 import { onCatAttacksRat } from '../game/ratCouncilResponse.js';
+import { RATS_TO_WIN } from './huntSession.js';
 
 const POUNCE_RANGE = 2.85;
 const POUNCE_ARM_DELAY = 0.78;
@@ -34,6 +35,8 @@ export class PounceSystem {
         this.promptRat = null;
         this.elapsed = 0;
         this.score = 0;
+        this.ratTotal = 0;
+        this.onRatEliminated = null;
         this.resolved = false;
 
         this.qteMarker = 0;
@@ -69,7 +72,7 @@ export class PounceSystem {
     buildUI() {
         this.scoreEl = document.createElement('div');
         this.scoreEl.className = 'pounce-score';
-        this.scoreEl.textContent = 'Caught: 0';
+        this.scoreEl.textContent = 'Rats 0 / 0';
         document.body.appendChild(this.scoreEl);
 
         this.promptEl = document.createElement('div');
@@ -179,6 +182,7 @@ export class PounceSystem {
     }
 
     tryStart() {
+        if (!this.player.isDeployed || this.player.isTreePerched || this.player.isTreeClimbing) return;
         if (this.player.isStunned || this.player.isRecovering || this.player.isLocked) return;
         const rat = this.findPounceableRat();
         if (!rat || !this.isRatInAim(rat)) return;
@@ -344,7 +348,7 @@ export class PounceSystem {
 
         if (success && rat) {
             this.score += 1;
-            this.scoreEl.textContent = `Caught: ${this.score}`;
+            this.syncScoreLabel();
             this.scoreEl.classList.remove('pulse');
             void this.scoreEl.offsetWidth;
             this.scoreEl.classList.add('pulse');
@@ -369,6 +373,18 @@ export class PounceSystem {
         const index = this.rats.indexOf(rat);
         if (index >= 0) this.rats.splice(index, 1);
         rat.dispose();
+        this.onRatEliminated?.(this.rats.length);
+    }
+
+    setRatTotal(total) {
+        this.ratTotal = total;
+        this.score = 0;
+        this.syncScoreLabel();
+    }
+
+    syncScoreLabel() {
+        const total = this.ratTotal || this.rats.length + this.score;
+        this.scoreEl.textContent = `Rats ${this.score} / ${total} · ${RATS_TO_WIN} to win`;
     }
 
     updatePounceCamera(delta, rat) {
@@ -505,7 +521,7 @@ export class PounceSystem {
         }
         this.hidePrompt();
         this.score = 0;
-        this.scoreEl.textContent = 'Caught: 0';
+        this.syncScoreLabel();
         this.scoreEl.classList.remove('pulse');
         this.returnToIdle(false);
     }

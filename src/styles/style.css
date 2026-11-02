@@ -436,6 +436,23 @@ button:focus-visible, input:focus-visible { outline: 3px solid #caff45; outline-
 .rat-guide article p { font-size: 12px; line-height: 1.6; color: #bcc8b8; }
 .field-tip { font-size: 11px; line-height: 1.6; color: #d0d7c8; background: #caff450d; padding: 12px; }
 .field-tip span { display: block; color: #caff45; font-size: 9px; letter-spacing: .12em; margin-bottom: 4px; }
+.high-scores-body { min-height: 120px; }
+.high-scores-empty { font-size: 12px; line-height: 1.65; color: #bcc8b8; margin: 8px 0 16px; }
+.high-scores-list { list-style: none; margin: 0; padding: 0; }
+.high-scores-list li { display: grid; grid-template-columns: 36px 1fr; gap: 4px 10px; align-items: baseline; border-top: 1px solid #ffffff18; padding: 12px 0; font-size: 12px; }
+.high-scores-rank { color: #caff45; font-weight: 900; font-style: italic; font-size: 16px; grid-row: span 2; }
+.high-scores-time { color: #f5f4ea; font-weight: 800; letter-spacing: .04em; }
+.high-scores-meta { color: #9aab9a; font-size: 11px; }
+.hunt-end-overlay { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; background: #0a0e0acc; backdrop-filter: blur(6px); }
+.hunt-end-card { max-width: 420px; width: 100%; padding: 28px 26px; background: #101912f0; border: 1px solid #ffffff28; border-top: 3px solid #caff45; box-shadow: 8px 8px 0 #05080580; }
+.hunt-end-card h2 { font-size: 26px; letter-spacing: -.04em; margin: 8px 0 12px; }
+.hunt-end-detail { font-size: 13px; line-height: 1.6; color: #c2c9bf; margin-bottom: 22px; }
+.hunt-end-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.hunt-end-actions button { flex: 1; min-width: 140px; padding: 14px 16px; border: 0; font-weight: 800; letter-spacing: .06em; transform: skew(-6deg); }
+.hunt-end-retry { background: #caff45; color: #142008; }
+.hunt-end-menu { background: #1a241c; color: #d2dbca; border: 1px solid #ffffff30 !important; }
+.game-hud .hud-stat--timer { color: #d8e2d0; }
+.game-hud .hud-stat--lives { color: #f0c9a8; border-color: #3a2a20; }
 .menu-footer { position: absolute; bottom: 20px; left: 5vw; right: 5vw; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: #d2dbca; }
 .menu-footer i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #caff45; margin-right: 8px; box-shadow: 0 0 10px #caff45; }
 .game-hud { position: fixed; bottom: 26px; left: 28px; z-index: 12; display: grid; grid-template-columns: min(260px, 72vw); grid-template-rows: auto auto; gap: 6px 0; pointer-events: none; filter: drop-shadow(0 3px 4px #0007); }
@@ -479,6 +496,58 @@ body:not([data-phase="playing"]) .game-hud { display: none; }
     color: #caff45;
     border-color: #3d5c28;
     box-shadow: 0 0 8px rgba(110, 207, 69, 0.25);
+}
+
+.game-hud .hud-stat--tree {
+    color: #9aab9a;
+    border: 1px solid #070a07;
+}
+
+.game-hud .hud-stat--tree[hidden] {
+    display: none !important;
+}
+
+.tree-climb-prompt {
+    position: fixed;
+    left: 50%;
+    bottom: 108px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(18, 24, 18, 0.82);
+    border: 1px solid rgba(160, 200, 130, 0.35);
+    color: #e8f2e4;
+    font: 600 13px/1.2 system-ui, sans-serif;
+    pointer-events: none;
+    z-index: 12;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.tree-climb-prompt[hidden] {
+    display: none !important;
+}
+
+.tree-climb-prompt-key {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: rgba(12, 18, 12, 0.9);
+    border: 1px solid rgba(180, 220, 150, 0.45);
+    font: 700 14px/1 system-ui, sans-serif;
+}
+
+.tree-climb-prompt--perched {
+    border-color: rgba(200, 180, 120, 0.4);
+    background: rgba(28, 24, 16, 0.85);
+}
+
+.settings-open .tree-climb-prompt {
+    visibility: hidden;
 }
 
 .hud-bars { grid-column: 1; grid-row: 2; }
