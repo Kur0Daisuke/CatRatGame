@@ -27,6 +27,7 @@ const CHAT = {
             'Is that rain?',
             'My whiskers are tingling…',
             'Nice patch of dirt.',
+            'Did you see the big dog?',
             'Anyone seen the cat? …anyone?'
         ],
         pair_dumb: ['Share the crumb?', 'You smell like cheese.', 'Let us nap here.'],
@@ -39,7 +40,8 @@ const CHAT = {
             'Perimeter clear… I think.',
             'Wind shifted — cat smell?',
             'I will check the bushes.',
-            'Report: all quiet. For now.'
+            'Must find the dog and report.',
+            'The dog is hunting. I will guide it.'
         ],
         pair_dumb: ['Stay alert, cousin.', 'Cat tracks that way.', 'Do not wander off.'],
         pair_scout: ['Swap patrol routes?', 'Heard something by the gate.', 'Eyes up, sister.'],

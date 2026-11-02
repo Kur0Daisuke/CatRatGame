@@ -399,7 +399,7 @@ export class PounceSystem {
         this.player.pounceAimRat = null;
         this.player.pounceAimCharge = 0;
 
-        if (this.isActive() || this.player.isStunned || this.player.isRecovering) {
+        if (this.isActive() || this.player.isStunned || this.player.isRecovering || this.player.isLocked) {
             this.hidePrompt();
             this.promptCharge = 0;
             this.promptTarget = null;
@@ -489,5 +489,24 @@ export class PounceSystem {
     abortToIdle() {
         this.overlayEl.hidden = true;
         this.returnToIdle(true);
+    }
+
+    /** Drop a pinned rat and clear the hunt score before a restart or the menu. */
+    cancelForReset() {
+        const rat = this.targetRat;
+        if (rat && !rat.isConsumed) {
+            rat.isPinned = false;
+            rat.isFlipping = false;
+            if (rat.state === 'PINNED') rat.state = 'IDLE';
+            if (rat.ratModel) {
+                rat.ratModel.rotation.x = 0;
+                rat.ratModel.position.y = 0.1;
+            }
+        }
+        this.hidePrompt();
+        this.score = 0;
+        this.scoreEl.textContent = 'Caught: 0';
+        this.scoreEl.classList.remove('pulse');
+        this.returnToIdle(false);
     }
 }

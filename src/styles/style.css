@@ -498,7 +498,11 @@ body:not([data-phase="playing"]) .game-hud { display: none; }
 .settings-panel h2 { font-size: 32px; font-weight: 900; margin-bottom: 25px; }
 .settings-controls { margin: 24px 0; color: #b8c7b1; line-height: 2.5; font-size: 12px; }
 kbd { font: 700 10px system-ui; padding: 3px 5px; border: 1px solid #ffffff35; color: #edf2e8; border-radius: 3px; }
-.resume-game { border: 0; background: #caff45; width: 100%; padding: 13px; font-weight: 900; display: flex; justify-content: space-between; color: #15200d; }
+.settings-actions { display: flex; flex-direction: column; gap: 8px; }
+.resume-game, .settings-secondary { border: 0; width: 100%; padding: 13px; font-weight: 900; cursor: pointer; }
+.resume-game { background: #caff45; display: flex; justify-content: space-between; color: #15200d; }
+.settings-secondary { background: transparent; color: #f7f3ea; border: 1px solid rgba(255, 255, 255, 0.28); }
+.settings-secondary:hover { border-color: #caff45; color: #caff45; }
 .settings-open .pounce-qte-overlay, .settings-open .pounce-prompt { visibility: hidden; }
 
 .bush-sneak-vignette {

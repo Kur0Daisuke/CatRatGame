@@ -19,11 +19,12 @@ export function createMenu({ player, onStart }) {
             <p class="menu-status" role="status">Getting your paws ready.</p>
         </section>
         <aside class="rat-guide" aria-labelledby="guide-title">
-            <p class="eyebrow">FIELD NOTES / 03 TYPES</p><h2 id="guide-title">Meet the locals.</h2>
+            <p class="eyebrow">FIELD NOTES / THE YARD</p><h2 id="guide-title">Meet the locals.</h2>
             <article><span class="rat-number">01</span><div><h3>Dumb rat <span>THE EASY ONE</span></h3><p>Slow to react and bad at picking a direction. Easiest to catch — often huddled near pouncers.</p></div></article>
-            <article><span class="rat-number">02</span><div><h3>Scout rat <span>THE WATCHER</span></h3><p>Wide vision and constant scanning. Marks the cat’s last seen spot so others steer clear for a while.</p></div></article>
+            <article><span class="rat-number">02</span><div><h3>Scout rat <span>THE WATCHER</span></h3><p>Finds the dog and reports your exact spot. Until a scout delivers that, the dog only wanders.</p></div></article>
             <article><span class="rat-number">03</span><div><h3>Pouncer rat <span>THE GUARD</span></h3><p>Reads the yard fast, stuns up close, then bolts. Only rats nearby get the warning.</p></div></article>
-            <div class="field-tip"><span>HUNTER'S TIP</span>Keep the noise down. Drink from puddles to recover stamina.</div>
+            <article><span class="rat-number">04</span><div><h3>Shiba <span>THE HUNTER</span></h3><p>Starts on the far side of the yard and can see you, the way the rats do. Scouts still run over and report your exact spot. If it grabs you, hit SPACE in the zone. Succeed and it is stunned for five seconds.</p></div></article>
+            <div class="field-tip"><span>HUNTER'S TIP</span>Keep the noise down. Drink from puddles to recover stamina. Slip the dog with the SPACE skill check.</div>
         </aside>
         <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · C sneak · E pounce · SPACE skill check · ESC settings</span></footer>`;
     document.body.appendChild(root);
@@ -91,13 +92,16 @@ export function createMenu({ player, onStart }) {
     }));
     start.addEventListener('click', () => {
         root.hidden = true;
-        resize.disconnect();
-        renderer.dispose();
         onStart();
     });
-    return { update(delta) {
-        if (root.hidden) return;
-        if (model) model.rotation.y += delta * 0.22;
-        renderer.render(preview, camera);
-    } };
+    return {
+        show() {
+            root.hidden = false;
+        },
+        update(delta) {
+            if (root.hidden) return;
+            if (model) model.rotation.y += delta * 0.22;
+            renderer.render(preview, camera);
+        }
+    };
 }

@@ -1,6 +1,8 @@
 import { scoutShareCatIntel, scoutTellRat } from './ratIntel.js';
 import { moveRatOnGround } from './ratMovement.js';
 import { interruptRatConversation } from './ratConversation.js';
+import { getHuntDog } from './huntDog.js';
+import { SCOUT_REPORT_DOG, SCOUT_SEEK_DOG, pickLine } from './dogLines.js';
 
 /** Nearest rat to run toward when warning the colony (prefer dumb rats). */
 export function findScoutWarnTarget(scout, allRats) {
@@ -34,18 +36,25 @@ export function findScoutWarnTarget(scout, allRats) {
     return best;
 }
 
+function warnTargetPosition(target) {
+    return target?.container?.position || target?.ratContainer?.position || null;
+}
+
 export function startScoutWarning(scout, catCenter, allRats, now) {
     interruptRatConversation(scout);
     const cfg = scout.kindConfig;
+    const dog = getHuntDog();
     scout.isWarning = true;
     scout.warningTimer = 0;
     scout.warningBroadcastTimer = 0;
-    scout.warnTargetRat = findScoutWarnTarget(scout, allRats);
+    scout.warnsDog = !!(dog?.container);
+    scout.warnTargetRat = scout.warnsDog ? dog : findScoutWarnTarget(scout, allRats);
+    scout.dogReport = { x: catCenter.x, z: catCenter.z };
     scout.state = 'WARNING';
-    scout.ratSpeed = cfg.scoutWarnRunSpeed ?? 1.35;
+    scout.ratSpeed = scout.warnsDog ? 2.7 : (cfg.scoutWarnRunSpeed ?? 1.35);
     scoutShareCatIntel(scout, catCenter, allRats, cfg.avoidSpotTtl, now, cfg.scoutTellRadius ?? 8);
     scout.scoutBroadcastTimer = cfg.sightBroadcastInterval;
-    scout.showChatBubble(scout.scoutTopic);
+    scout.showChatBubble(scout.warnsDog ? pickLine(SCOUT_SEEK_DOG) : scout.scoutTopic);
 }
 
 export function updateScoutWarning(scout, delta, catCenter, allRats, now, senses) {
@@ -54,16 +63,21 @@ export function updateScoutWarning(scout, delta, catCenter, allRats, now, senses
     if (senses.bushHidden) {
         scout.isWarning = false;
         scout.warnTargetRat = null;
+        scout.warnsDog = false;
         if (scout.state === 'WARNING') scout.state = 'IDLE';
         scout.threatMeter = Math.max(0, (scout.threatMeter ?? 0) - 0.35);
         return 'continue';
+    }
+
+    if (senses.canSee) {
+        scout.dogReport = { x: catCenter.x, z: catCenter.z };
     }
 
     scout.warningTimer += delta;
     scout.warningBroadcastTimer -= delta;
     scout.scoutBroadcastTimer = Math.max(0, scout.scoutBroadcastTimer - delta);
 
-    if (!scout.warnTargetRat || scout.warnTargetRat.isConsumed || scout.warnTargetRat.isPinned) {
+    if (!scout.warnsDog && (!scout.warnTargetRat || scout.warnTargetRat.isConsumed || scout.warnTargetRat.isPinned)) {
         scout.warnTargetRat = findScoutWarnTarget(scout, allRats);
     }
 
@@ -74,23 +88,26 @@ export function updateScoutWarning(scout, delta, catCenter, allRats, now, senses
 
     if (scout.warningBroadcastTimer <= 0) {
         scout.warningBroadcastTimer = 0.7;
-        scout.showChatBubble(scout.scoutTopic);
+        scout.showChatBubble(scout.warnsDog ? pickLine(SCOUT_SEEK_DOG) : scout.scoutTopic);
     }
 
     const fleeDist = cfg.scoutFleeDist ?? 3.15;
     if (senses.distance <= fleeDist) {
         scout.isWarning = false;
         scout.warnTargetRat = null;
+        scout.warnsDog = false;
         return 'flee';
     }
 
     const targetRat = scout.warnTargetRat;
-    if (!targetRat?.ratContainer) {
+    const targetPos = warnTargetPosition(targetRat);
+    if (!targetPos) {
+        const wasDog = scout.warnsDog;
         scout.isWarning = false;
-        return 'flee';
+        scout.warnTargetRat = null;
+        scout.warnsDog = false;
+        return wasDog ? 'done' : 'flee';
     }
-
-    const targetPos = targetRat.ratContainer.position;
     const ratPos = scout.ratContainer.position;
     const dx = targetPos.x - ratPos.x;
     const dz = targetPos.z - ratPos.z;
@@ -102,9 +119,22 @@ export function updateScoutWarning(scout, delta, catCenter, allRats, now, senses
         scoutShareCatIntel(scout, catCenter, allRats, cfg.avoidSpotTtl * 0.85, now, cfg.scoutTellRadius ?? 8);
     }
 
-    const reachedAlly = len < 2.2;
-    const timedOut = scout.warningTimer > (cfg.scoutWarnMaxDuration ?? 7);
+    const reachDist = scout.warnsDog ? 2.15 : 2.2;
+    const maxDuration = scout.warnsDog ? 36 : (cfg.scoutWarnMaxDuration ?? 7);
+    const reachedAlly = len < reachDist;
+    const timedOut = scout.warningTimer > maxDuration;
     if (reachedAlly || timedOut) {
+        if (scout.warnsDog) {
+            const report = scout.dogReport || { x: catCenter.x, z: catCenter.z };
+            if ((reachedAlly || len < 5) && targetRat?.receiveCatReport) {
+                targetRat.receiveCatReport(report);
+                scout.showChatBubble(pickLine(SCOUT_REPORT_DOG));
+            }
+            scout.isWarning = false;
+            scout.warnTargetRat = null;
+            scout.warnsDog = false;
+            return 'done';
+        }
         scoutTellRat(scout, targetRat, catCenter, cfg.avoidSpotTtl, now);
         scoutShareCatIntel(
             scout,

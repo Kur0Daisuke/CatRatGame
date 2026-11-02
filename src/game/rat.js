@@ -280,6 +280,7 @@ export class Rat {
         loader.load(
             modelPath,
             (gltf) => {
+                if (this.isConsumed) return;
                 this.ratModel = gltf.scene;
                 this.ratModel.position.set(0, 0.1, 0);
                 this.ratModel.rotation.y = Math.PI;
@@ -474,6 +475,7 @@ export class Rat {
         interruptRatConversation(this);
         this.isWarning = false;
         this.warnTargetRat = null;
+        this.warnsDog = false;
         this.isEscaping = true;
         this.escapeTimer = 0;
         this.state = 'ESCAPING';
@@ -912,6 +914,7 @@ export class Rat {
             if (this.isWarning) {
                 this.isWarning = false;
                 this.warnTargetRat = null;
+                this.warnsDog = false;
                 if (this.state === 'WARNING') this.state = 'IDLE';
             }
         }
@@ -932,6 +935,10 @@ export class Rat {
             const warnResult = updateScoutWarning(this, deltaTime, catCenter, intelTargets, now, senses);
             if (warnResult === 'flee') {
                 this.beginFlee(catCenter, 'sight');
+            } else if (warnResult === 'done') {
+                this.state = 'IDLE';
+                this.idleTimer = 0;
+                this.ratSpeed = cfg.wanderSpeed;
             }
         } else if (this.isEscaping) {
             this.updateEscape(deltaTime, catCenter);

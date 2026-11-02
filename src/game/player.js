@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clampPositionToArena, computeBushBlend, resolveSphereOverlapXZ, applyTerrainPose, sampleTerrainHeight, isInBushCover, BUSH_COVER_EXIT } from '../core/collision.js';
 import { computeCatSourceDecibels } from '../systems/catSound.js';
 import { findPuddleAtPosition } from '../world/puddles.js';
+import { applyWalkBob, createWalkBob } from '../systems/walkBob.js';
 
 export const CAT_MODELS = [
     { id: 'original', label: 'Original', url: '/car.glb' },
@@ -42,9 +43,7 @@ export class Player {
         this.tempMatrix = new THREE.Matrix4();
         this.slerpSpeed = 0.1;
 
-        this.translationX = 0;
-        this.translationY = 0;
-        this.stoppedMoving = false;
+        this.walkBob = createWalkBob();
 
         this.soundDecibel = 0;
         this.aerialSphere = new THREE.Sphere();
@@ -220,6 +219,41 @@ export class Player {
         if (this.carModel && !this.isStunned && !this.isRecovering) {
             this.carModel.position.y = 0;
             this.carModel.rotation.x = 0;
+        }
+    }
+
+    /** Put the cat back on the drop spot, ready for another entrance. */
+    prepareDrop(x = 15, z = 15) {
+        this.endPounce();
+        this.isDeployed = false;
+        this.isLocked = false;
+        this.isStunned = false;
+        this.isRecovering = false;
+        this.stunTimer = 0;
+        this.stunEntryProgress = 0;
+        this.recoveryProgress = 0;
+        this.confuseTimer = 0;
+        this.confuseStrength = 0;
+        this.confuseLookDrift = 0;
+        this.stamina = this.staminaMax;
+        this.walkDirectionX = 0;
+        this.walkDirectionZ = 0;
+        this.shiftHeld = false;
+        this.sneakHeld = false;
+        this.headingYaw = 0;
+        this.hiddenInBush = false;
+        this.bushCoverActive = false;
+        this.bushBlend = 0;
+        this.targetBushBlend = 0;
+        this._prevTargetBushBlend = 0;
+        this.container.position.set(x, 0, z);
+        this.container.visible = true;
+        applyTerrainPose(this.container, 0, 0);
+        this.setControlsBlocked(true);
+        if (this.carModel) {
+            this.carModel.position.y = 0;
+            this.carModel.rotation.set(0, 0, 0);
+            this.carModel.scale.set(1, 1, 1);
         }
     }
 
@@ -437,31 +471,7 @@ export class Player {
             moveLen > 0 ? moveZ : 0
         );
         
-        if (moveDirection.lengthSq() > 0) {
-            moveDirection.normalize();
-            this.translationX += 0.04;
-            this.translationY += 0.08;
-            this.stoppedMoving = true;
-        } 
-        else if (this.stoppedMoving) {
-            this.translationY += 0.08;
-            if (Math.abs(Math.sin(this.translationY * 0.8)) < 0.05) {
-                this.stoppedMoving = false;
-            }
-        }
-
-        if (Math.sin(this.translationX) >= 0.1 || Math.sin(this.translationX) <= -0.1) {
-            this.translationX += 0.04;
-        }
-
-        if (this.carModel) {
-            this.carModel.rotation.z = Math.sin(this.translationX) * 2 * delta;
-            if (!this.stoppedMoving && moveDirection.lengthSq() === 0) {
-                this.carModel.position.y = 0;
-            } else {
-                this.carModel.position.y = Math.abs(Math.sin(this.translationY * 0.8)) * 2 * delta;
-            }
-        }
+        applyWalkBob(this.walkBob, this.carModel, moveDirection.lengthSq() > 0, delta, 0);
 
         this.container.position.x += moveX * this.speed * delta;
         this.container.position.z += moveZ * this.speed * delta;

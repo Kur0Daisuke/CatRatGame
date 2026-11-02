@@ -31,6 +31,9 @@ import { updateRatConversations } from './game/ratConversation.js';
 import { createBushVignette } from './ui/bushVignette.js';
 import { createBushCoverHud } from './ui/bushCoverHud.js';
 import { createBushCoverDebug } from './world/bushCoverDebug.js';
+import { Dog } from './game/dog.js';
+import { setHuntDog } from './game/huntDog.js';
+import { DogCatchSystem } from './systems/dogCatch.js';
 
 
 
@@ -96,6 +99,16 @@ player.catVfx = catVfx;
 
 const pounce = new PounceSystem({ camera, renderer, player, rats, eatVfx });
 
+const dog = new Dog(scene, player.container.position.x, player.container.position.z);
+setHuntDog(dog);
+const dogCatch = new DogCatchSystem({
+    camera,
+    renderer,
+    player,
+    dog,
+    isPounceActive: () => pounce.isActive()
+});
+
 const soundVisual = new CatSoundVisual(scene);
 
 const staminaVisual = new StaminaVisual();
@@ -129,39 +142,72 @@ staminaValue.className = 'stamina-value';
 
 staminaVisual.meterEl.appendChild(staminaValue);
 
-const settings = createSettings({ rats, onChange(open) {
+let huntStarted = false;
 
-    player.setControlsBlocked(open || phase !== 'playing');
+function refillRats() {
+    for (const rat of rats) rat.dispose();
+    rats.length = 0;
+    const fresh = spawnRats(scene, terrain);
+    for (const rat of fresh) {
+        rats.push(rat);
+        rat.getAllRats = () => rats;
+    }
+}
 
-    document.body.classList.toggle('settings-open', open);
-
-} });
-
-const menu = createMenu({ player, onStart() {
-
+function startDrop() {
+    pounce.cancelForReset();
+    dogCatch.abort();
+    if (huntStarted) refillRats();
+    huntStarted = true;
+    player.prepareDrop(15, 15);
+    player.container.position.y = landingY + 24;
+    player.aerialSphere.center.set(15, 1000, 15);
+    player.sightSphere.center.set(15, 1000, 15);
+    player.collisionSphere.center.set(15, 1000, 15);
+    dog.resetFar(15, 15);
     phase = 'dropping';
-
     document.body.dataset.phase = phase;
-
     dropTime = 0;
-
     landingSmokeSpawned = false;
-
-    player.container.visible = true;
-
     look.yaw = 0;
-
     look.pitch = 0.54;
-
     camera.position.set(15, landingY + Math.sin(look.pitch) * cameraDistance, 15 + Math.cos(look.pitch) * cameraDistance);
-
     camera.lookAt(15, landingY + 0.45, 15);
+}
 
-} });
+function returnToMenu() {
+    pounce.cancelForReset();
+    dogCatch.abort();
+    phase = 'menu';
+    document.body.dataset.phase = phase;
+    player.container.visible = false;
+    player.isDeployed = false;
+    player.setControlsBlocked(true);
+    gardenTime = 0;
+    menu.show();
+}
+
+const settings = createSettings({
+    rats,
+    onChange(open) {
+        player.setControlsBlocked(open || phase !== 'playing');
+        document.body.classList.toggle('settings-open', open);
+    },
+    onRestart() {
+        settings.setOpen(false);
+        startDrop();
+    },
+    onMenu() {
+        settings.setOpen(false);
+        returnToMenu();
+    }
+});
+
+const menu = createMenu({ player, onStart() { startDrop(); } });
 
 window.addEventListener('keydown', event => {
 
-    if (event.code === 'Escape' && phase !== 'menu' && !event.repeat) {
+        if (event.code === 'Escape' && phase !== 'menu' && !event.repeat && !dogCatch.isActive()) {
 
         event.preventDefault();
 
@@ -179,7 +225,7 @@ window.addEventListener('keydown', event => {
 
 document.addEventListener('pointerlockchange', () => {
 
-    if (!document.pointerLockElement && phase === 'playing' && !pounce.isActive() && !settings.isOpen) {
+    if (!document.pointerLockElement && phase === 'playing' && !pounce.isActive() && !dogCatch.isActive() && !settings.isOpen) {
 
         pointerUnlockTime = performance.now();
 
@@ -191,7 +237,7 @@ document.addEventListener('pointerlockchange', () => {
 
 window.addEventListener('mousemove', event => {
 
-    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera()) return;
+    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera() || dogCatch.controlsCamera()) return;
 
     const sensitivity = document.pointerLockElement === renderer.domElement ? 0.0026 : 0.004;
 
@@ -203,7 +249,7 @@ window.addEventListener('mousemove', event => {
 
 renderer.domElement.addEventListener('click', () => {
 
-    if (phase !== 'playing' || settings.isOpen || pounce.isActive()) return;
+    if (phase !== 'playing' || settings.isOpen || pounce.isActive() || dogCatch.isActive()) return;
 
     renderer.domElement.requestPointerLock();
 
@@ -302,6 +348,8 @@ function animate(time) {
 
         rats.forEach(rat => rat.update(delta));
         updateRatConversations(rats, delta, player.container.position);
+        dog.update(delta, player, rats);
+        if (phase === 'playing') dogCatch.update(delta);
 
     }
 
@@ -315,7 +363,7 @@ function animate(time) {
 
     }
 
-    if (phase === 'playing' && !settings.isOpen && !pounce.controlsCamera()) {
+    if (phase === 'playing' && !settings.isOpen && !pounce.controlsCamera() && !dogCatch.controlsCamera()) {
 
         const focus = player.container.position;
 
