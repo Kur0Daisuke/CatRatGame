@@ -67,9 +67,10 @@ export class DogCatchSystem {
         this.overlayEl = document.createElement('div');
         this.overlayEl.className = 'pounce-qte-overlay';
         this.overlayEl.hidden = true;
+        const skillKey = document.body.classList.contains('touch-ui') ? 'TAP' : 'SPACE';
         this.overlayEl.innerHTML = `
             <div class="pounce-qte">
-                <div class="pounce-qte-label">Press <kbd class="pounce-qte-key">SPACE</kbd> in the zone</div>
+                <div class="pounce-qte-label">Press <kbd class="pounce-qte-key">${skillKey}</kbd> in the zone</div>
                 <div class="pounce-qte-track">
                     <div class="pounce-qte-zone"></div>
                     <div class="pounce-qte-marker"></div>
@@ -89,11 +90,17 @@ export class DogCatchSystem {
         document.body.appendChild(this.toastEl);
     }
 
+    submitSkill() {
+        if (this.state !== 'qte' || this.resolved) return false;
+        this.resolveRound(this.isMarkerInZone());
+        return true;
+    }
+
     bindInput() {
         window.addEventListener('keydown', (event) => {
-            if (event.code !== 'Space' || this.state !== 'qte' || this.resolved || event.repeat) return;
+            if (event.code !== 'Space' || event.repeat) return;
+            if (!this.submitSkill()) return;
             event.preventDefault();
-            this.resolveRound(this.isMarkerInZone());
         });
     }
 

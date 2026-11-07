@@ -27,12 +27,14 @@ export function setupScene() {
     sunVisual.position.copy(sunDirection.clone().multiplyScalar(340));
     scene.add(sunVisual);
 
-    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const mobile = window.matchMedia('(pointer: coarse)').matches
+        || window.matchMedia('(hover: none)').matches;
+
+    const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 3.4, 5.6);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    const renderer = new THREE.WebGLRenderer({ antialias: !mobile, powerPreference: mobile ? 'low-power' : 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NoToneMapping;
     renderer.toneMappingExposure = 1;
@@ -47,8 +49,9 @@ export function setupScene() {
     sunLight.position.copy(sunDirection.clone().multiplyScalar(80));
     sunLight.target.position.set(0, 0, 0);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
+    const shadowSize = mobile ? 1024 : 2048;
+    sunLight.shadow.mapSize.width = shadowSize;
+    sunLight.shadow.mapSize.height = shadowSize;
     sunLight.shadow.camera.left = -40;
     sunLight.shadow.camera.right = 40;
     sunLight.shadow.camera.top = 40;
@@ -65,11 +68,22 @@ export function setupScene() {
     fillLight.position.set(-16, 10, -12);
     scene.add(fillLight);
 
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+    function resizeRenderer() {
+        const width = Math.round(window.visualViewport?.width || window.innerWidth);
+        const height = Math.round(window.visualViewport?.height || window.innerHeight);
+        document.documentElement.style.height = `${height}px`;
+        document.body.style.height = `${height}px`;
+        camera.aspect = width / Math.max(height, 1);
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+        renderer.setSize(width, height, false);
+        renderer.domElement.style.width = '100%';
+        renderer.domElement.style.height = '100%';
+    }
+
+    resizeRenderer();
+    window.addEventListener('resize', resizeRenderer);
+    window.visualViewport?.addEventListener('resize', resizeRenderer);
+    window.visualViewport?.addEventListener('scroll', resizeRenderer);
 
     return { scene, camera, renderer };
 }

@@ -36,8 +36,11 @@ import { setHuntDog } from './game/huntDog.js';
 import { DogCatchSystem } from './systems/dogCatch.js';
 import { TreeClimbSystem } from './systems/treeClimb.js';
 import { createHuntSession } from './systems/huntSession.js';
+import { createTouchControls, prefersTouchControls } from './ui/touchControls.js';
 
 
+
+if (prefersTouchControls()) document.body.classList.add('touch-ui');
 
 const { scene, camera, renderer } = setupScene();
 
@@ -89,7 +92,9 @@ const puddles = environment.puddles || [];
 
 const trees = environment.trees || [];
 
-const look = { yaw: 0, pitch: 0.54 };
+const clouds = environment.clouds;
+
+const look = { yaw: 0, pitch: 0.4 };
 
 const cameraDistance = 6.6;
 
@@ -249,6 +254,47 @@ const dogCatch = new DogCatchSystem({
 
 hudStats.prepend(huntSession.livesEl);
 hudStats.prepend(huntSession.timerEl);
+
+function applyLook(dx, dy, sensitivity) {
+    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera() || dogCatch.controlsCamera() || huntSession.isEnded()) return;
+    const sens = sensitivity ?? (document.pointerLockElement === renderer.domElement ? 0.0026 : 0.004);
+    look.yaw -= THREE.MathUtils.clamp(dx, -80, 80) * sens;
+    look.pitch = THREE.MathUtils.clamp(look.pitch + THREE.MathUtils.clamp(dy, -80, 80) * sens, 0.22, 1.15);
+}
+
+const touchControls = createTouchControls({
+    player,
+    canvas: renderer.domElement,
+    onLook: (dx, dy) => applyLook(dx, dy, 0.0052),
+    onPounce: () => pounce.requestPounce(),
+    onClimb: () => treeClimb.requestUse(),
+    onSkill: () => {
+        if (pounce.submitSkill()) return;
+        dogCatch.submitSkill();
+    },
+    onPause: () => {
+        if (phase === 'menu' || dogCatch.isActive() || huntSession.isEnded()) return;
+        settings.setOpen(!settings.isOpen);
+    },
+    getState: () => {
+        const inPlay = phase === 'playing'
+            && !settings.isOpen
+            && !huntSession.isEnded()
+            && !pounce.controlsCamera()
+            && !dogCatch.controlsCamera();
+        return {
+            showStick: inPlay && !player.isLocked && !player.isStunned && !player.isRecovering,
+            showActions: inPlay,
+            showLook: inPlay,
+            showPause: phase !== 'menu' && !settings.isOpen && !huntSession.isEnded() && !dogCatch.isActive() && pounce.state !== 'qte',
+            showSkill: !settings.isOpen && !huntSession.isEnded() && (pounce.state === 'qte' || dogCatch.state === 'qte'),
+            pounceReady: inPlay && !pounce.promptEl.hidden,
+            climbReady: inPlay && !treeClimb.promptEl.hidden,
+            perched: player.isTreePerched
+        };
+    }
+});
+
 window.addEventListener('keydown', event => {
 
         if (event.code === 'Escape' && phase !== 'menu' && !event.repeat && !dogCatch.isActive() && !huntSession.isEnded()) {
@@ -269,6 +315,8 @@ window.addEventListener('keydown', event => {
 
 document.addEventListener('pointerlockchange', () => {
 
+    if (document.body.classList.contains('touch-ui')) return;
+
     if (!document.pointerLockElement && phase === 'playing' && !pounce.isActive() && !dogCatch.isActive() && !settings.isOpen && !huntSession.isEnded()) {
 
         pointerUnlockTime = performance.now();
@@ -280,19 +328,12 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 window.addEventListener('mousemove', event => {
-
-    if (phase !== 'playing' || settings.isOpen || pounce.controlsCamera() || dogCatch.controlsCamera() || huntSession.isEnded()) return;
-
-    const sensitivity = document.pointerLockElement === renderer.domElement ? 0.0026 : 0.004;
-
-    look.yaw -= THREE.MathUtils.clamp(event.movementX, -80, 80) * sensitivity;
-
-    look.pitch = THREE.MathUtils.clamp(look.pitch + THREE.MathUtils.clamp(event.movementY, -80, 80) * sensitivity, 0.22, 1.15);
-
+    if (document.body.classList.contains('touch-ui')) return;
+    applyLook(event.movementX, event.movementY);
 });
 
 renderer.domElement.addEventListener('click', () => {
-
+    if (document.body.classList.contains('touch-ui')) return;
     if (phase !== 'playing' || settings.isOpen || pounce.isActive() || dogCatch.isActive() || huntSession.isEnded()) return;
 
     renderer.domElement.requestPointerLock();
@@ -309,7 +350,11 @@ function animate(time) {
 
     const delta = Math.min(clock.getDelta(), 0.05);
 
+    touchControls.sync();
+
     menu.update(delta);
+
+    clouds?.update(delta, camera);
 
     if (!settings.isOpen) {
 
@@ -413,9 +458,9 @@ function animate(time) {
 
         gardenTime += delta * 0.035;
 
-        camera.position.set(15 + Math.sin(gardenTime) * 19, landingY + 9, 15 + Math.cos(gardenTime) * 19);
+        camera.position.set(15 + Math.sin(gardenTime) * 18, landingY + 5.4, 15 + Math.cos(gardenTime) * 18);
 
-        camera.lookAt(15, landingY, 15);
+        camera.lookAt(15, landingY + 3.1, 15);
 
     }
 

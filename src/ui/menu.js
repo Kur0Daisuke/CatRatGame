@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { CAT_MODELS } from '../game/player.js';
 
 export function createMenu({ player, onStart }) {
+    const touch = document.body.classList.contains('touch-ui');
+    const controlsHint = touch
+        ? 'Stick to move · drag to look · RUN · SNEAK · POUNCE · TREE · TAP skill checks'
+        : 'WASD move · SHIFT run · C sneak · E pounce · F tree climb · SPACE skill check · ESC settings';
     const root = document.createElement('main');
     root.className = 'main-menu';
     root.innerHTML = `
@@ -25,7 +29,7 @@ export function createMenu({ player, onStart }) {
             <div class="high-scores-body"></div>
             <div class="field-tip"><span>THE HUNT</span>Timer runs from landing until you hit 30 catches. Fastest clears with more lives left rank higher.</div>
         </aside>
-            <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>WASD move · SHIFT run · C sneak · E pounce · F tree climb · SPACE skill check · ESC settings</span></footer>`;
+            <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>${controlsHint}</span></footer>`;
     document.body.appendChild(root);
     const scoresBody = root.querySelector('.high-scores-body');
     function refreshHighScores() {

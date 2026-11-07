@@ -41,7 +41,8 @@ export class TreeClimbSystem {
     buildUI() {
         this.promptEl = document.createElement('div');
         this.promptEl.className = 'pounce-prompt';
-        this.promptEl.innerHTML = '<span class="pounce-prompt-key">F</span>';
+        const promptKey = document.body.classList.contains('touch-ui') ? 'UP' : 'F';
+        this.promptEl.innerHTML = `<span class="pounce-prompt-key">${promptKey}</span>`;
         this.promptEl.hidden = true;
         document.body.appendChild(this.promptEl);
 
@@ -51,27 +52,28 @@ export class TreeClimbSystem {
         this.hudEl.hidden = true;
     }
 
+    requestUse() {
+        if (!this.player.isDeployed || this.player.controlsBlocked) return false;
+        if (this.player.isStunned || this.player.isRecovering) return false;
+        if (this.player.leapActive || (this.player.isLocked && this.state === 'idle')) return false;
+
+        if (this.state === 'perched') {
+            this.beginDescend();
+            return true;
+        }
+
+        if (this.state !== 'idle') return false;
+
+        const tree = findNearestClimbableTree(this.player.container.position, this.trees);
+        if (!tree) return false;
+        this.beginClimb(tree);
+        return true;
+    }
+
     bindInput() {
         window.addEventListener('keydown', (event) => {
             if (event.code !== 'KeyF' || event.repeat) return;
-            if (!this.player.isDeployed || this.player.controlsBlocked) return;
-            if (this.player.isStunned || this.player.isRecovering) return;
-            if (this.player.leapActive || (this.player.isLocked && this.state === 'idle')) return;
-
-            if (this.state === 'perched') {
-                event.preventDefault();
-                this.beginDescend();
-                return;
-            }
-
-            if (this.state !== 'idle') return;
-            if (this.player.leapActive) return;
-
-            const tree = findNearestClimbableTree(this.player.container.position, this.trees);
-            if (!tree) return;
-
-            event.preventDefault();
-            this.beginClimb(tree);
+            if (this.requestUse()) event.preventDefault();
         });
     }
 
@@ -169,7 +171,8 @@ export class TreeClimbSystem {
         const sx = (this._screen.x * 0.5 + 0.5) * window.innerWidth;
         const sy = (-this._screen.y * 0.5 + 0.5) * window.innerHeight;
         this.promptEl.hidden = false;
-        this.promptEl.innerHTML = '<span class="pounce-prompt-key">F</span>';
+        const promptKey = document.body.classList.contains('touch-ui') ? 'UP' : 'F';
+        this.promptEl.innerHTML = `<span class="pounce-prompt-key">${promptKey}</span>`;
         this.promptEl.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -120%)`;
     }
 

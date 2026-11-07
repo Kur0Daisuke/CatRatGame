@@ -1,19 +1,26 @@
 import { debugSettings, onWireframesChange, setWireframesVisible } from '../core/debugSettings.js';
 
 export function createSettings({ rats, onChange, onRestart, onMenu }) {
+    const touch = document.body.classList.contains('touch-ui');
+    const controls = touch
+        ? '<p>Left stick moves. Drag the garden to look.</p><p>Hold <kbd>RUN</kbd> to sprint, <kbd>SNEAK</kbd> for quiet steps</p><p><kbd>POUNCE</kbd> attacks. <kbd>TREE</kbd> climbs or hops down</p><p><kbd>TAP</kbd> in the zone for skill checks. Puddles restore stamina.</p>'
+        : '<p><kbd>W A S D</kbd> Move</p><p><kbd>SHIFT</kbd> Run <kbd>C</kbd> Sneak</p><p><kbd>E</kbd> Pounce <kbd>SPACE</kbd> Skill check</p><p>Stand in puddles to restore stamina. SPACE also slips the dog.</p>';
+    const help = touch
+        ? 'The pause button opens this menu.'
+        : 'Click the garden after resuming to capture the mouse.';
     const root = document.createElement('div');
     root.className = 'settings';
     root.hidden = true;
     root.innerHTML = `<section class="settings-panel" id="game-settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <p class="eyebrow">TAKE A BREATHER</p><h2 id="settings-title">Settings</h2>
         <label class="debug-toggle"><input type="checkbox" id="wireframe-toggle"> Show debug wireframes (rats, bush cover rings)</label>
-        <div class="settings-controls"><p><kbd>W A S D</kbd> Move</p><p><kbd>SHIFT</kbd> Run <kbd>C</kbd> Sneak</p><p><kbd>E</kbd> Pounce <kbd>SPACE</kbd> Skill check</p><p>Stand in puddles to restore stamina. SPACE also slips the dog.</p></div>
+        <div class="settings-controls">${controls}</div>
         <div class="settings-actions">
-            <button class="resume-game" type="button">RESUME <span>ESC ↗</span></button>
+            <button class="resume-game" type="button">RESUME <span>${touch ? 'PAUSE ↗' : 'ESC ↗'}</span></button>
             <button class="settings-secondary" type="button" data-settings="restart">RESTART HUNT</button>
             <button class="settings-secondary" type="button" data-settings="menu">MAIN MENU</button>
         </div>
-        <p class="settings-help">Click the garden after resuming to capture the mouse.</p>
+        <p class="settings-help">${help}</p>
     </section>`;
     document.body.appendChild(root);
     const resume = root.querySelector('button');

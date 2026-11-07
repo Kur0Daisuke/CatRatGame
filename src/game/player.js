@@ -38,6 +38,8 @@ export class Player {
         this.isSneaking = false;
         this.shiftHeld = false;
         this.sneakHeld = false;
+        this.touchRun = false;
+        this.touchSneak = false;
         this.soundTime = 0;
 
         this.targetQuaternion = new THREE.Quaternion();
@@ -149,6 +151,27 @@ export class Player {
         this.walkDirectionZ = 0;
         this.shiftHeld = false;
         this.sneakHeld = false;
+        this.touchRun = false;
+        this.touchSneak = false;
+    }
+
+    setTouchRun(held) {
+        this.touchRun = Boolean(held) && !this.controlsBlocked;
+    }
+
+    setTouchSneak(held) {
+        this.touchSneak = Boolean(held) && !this.controlsBlocked;
+    }
+
+    /** Analog stick. x is right, z is backward, each from -1 to 1. */
+    setTouchMove(x, z) {
+        if (this.controlsBlocked || this.isStunned || this.isRecovering || this.isLocked || this.leapActive) {
+            this.walkDirectionX = 0;
+            this.walkDirectionZ = 0;
+            return;
+        }
+        this.walkDirectionX = x;
+        this.walkDirectionZ = z;
     }
 
     isSneakKey(event) {
@@ -244,6 +267,8 @@ export class Player {
         this.walkDirectionZ = 0;
         this.shiftHeld = false;
         this.sneakHeld = false;
+        this.touchRun = false;
+        this.touchSneak = false;
         this.headingYaw = 0;
         this.hiddenInBush = false;
         this.bushCoverActive = false;
@@ -348,10 +373,12 @@ export class Player {
             this.bushBlend
         );
         this.isMoving = this.walkDirectionX !== 0 || this.walkDirectionZ !== 0;
-        const wantsRun = this.isMoving && this.shiftHeld && !this.sneakHeld;
+        const runHeld = this.shiftHeld || this.touchRun;
+        const sneakHeld = this.sneakHeld || this.touchSneak;
+        const wantsRun = this.isMoving && runHeld && !sneakHeld;
         const canRun = this.stamina > this.runMinStamina;
         this.isRunning = wantsRun && canRun;
-        this.isSneaking = this.isMoving && this.sneakHeld && !this.shiftHeld;
+        this.isSneaking = this.isMoving && sneakHeld && !runHeld;
         this.speed = this.isRunning
             ? this.runSpeed
             : this.isSneaking
@@ -461,6 +488,7 @@ export class Player {
         let moveX = forwardX * inputForward + rightX * inputRight;
         let moveZ = forwardZ * inputForward + rightZ * inputRight;
         const moveLen = Math.hypot(moveX, moveZ);
+        const moveScale = Math.min(1, moveLen);
         let targetYaw = this.headingYaw;
         if (moveLen > 0) {
             moveX /= moveLen;
@@ -483,8 +511,8 @@ export class Player {
         
         applyWalkBob(this.walkBob, this.carModel, moveDirection.lengthSq() > 0, delta, 0);
 
-        this.container.position.x += moveX * this.speed * delta;
-        this.container.position.z += moveZ * this.speed * delta;
+        this.container.position.x += moveX * moveScale * this.speed * delta;
+        this.container.position.z += moveZ * moveScale * this.speed * delta;
         clampPositionToArena(this.container.position);
         resolveTreeTrunkOverlapXZ(
             this.container.position,

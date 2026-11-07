@@ -84,9 +84,10 @@ export class PounceSystem {
         this.overlayEl = document.createElement('div');
         this.overlayEl.className = 'pounce-qte-overlay';
         this.overlayEl.hidden = true;
+        const skillKey = document.body.classList.contains('touch-ui') ? 'TAP' : 'SPACE';
         this.overlayEl.innerHTML = `
             <div class="pounce-qte">
-                <div class="pounce-qte-label">Press <kbd class="pounce-qte-key">SPACE</kbd> in the zone</div>
+                <div class="pounce-qte-label">Press <kbd class="pounce-qte-key">${skillKey}</kbd> in the zone</div>
                 <div class="pounce-qte-track">
                     <div class="pounce-qte-zone"></div>
                     <div class="pounce-qte-marker"></div>
@@ -106,20 +107,29 @@ export class PounceSystem {
         document.body.appendChild(this.toastEl);
     }
 
+    requestPounce() {
+        if (this.player.controlsBlocked || this.isActive()) return;
+        this.tryStart();
+    }
+
+    submitSkill() {
+        if (this.player.controlsBlocked) return false;
+        if (this.state !== 'qte' || this.resolved) return false;
+        this.resolveQte(this.isMarkerInZone());
+        return true;
+    }
+
     bindInput() {
         window.addEventListener('keydown', (event) => {
-            if (this.player.controlsBlocked) return;
             if (event.repeat) return;
 
-            if (event.code === 'Space' && this.state === 'qte' && !this.resolved) {
+            if (event.code === 'Space' && this.submitSkill()) {
                 event.preventDefault();
-                this.resolveQte(this.isMarkerInZone());
                 return;
             }
 
             if (event.code !== 'KeyE') return;
-            if (this.isActive()) return;
-            this.tryStart();
+            this.requestPounce();
         });
 
         this.overlayEl.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -457,7 +467,8 @@ export class PounceSystem {
         this.promptEl.classList.toggle('pounce-prompt-sneak', sneaking);
         const pct = Math.round((this.promptCharge / POUNCE_ARM_DELAY) * 100);
         if (ready) {
-            this.promptEl.innerHTML = '<span class="pounce-prompt-key">E</span>';
+            const promptKey = document.body.classList.contains('touch-ui') ? 'GO' : 'E';
+            this.promptEl.innerHTML = `<span class="pounce-prompt-key">${promptKey}</span>`;
             this.promptEl.classList.remove('pounce-prompt-charging');
         } else {
             this.promptEl.innerHTML = `<span class="pounce-prompt-key pounce-prompt-wait">${pct}%</span>`;
