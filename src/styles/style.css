@@ -611,11 +611,115 @@ body.touch-ui {
 }
 body.touch-ui > canvas { touch-action: none; }
 body.touch-ui .main-menu {
-    touch-action: pan-y;
-    padding-top: calc(16px + env(safe-area-inset-top));
-    padding-right: calc(16px + env(safe-area-inset-right));
-    padding-bottom: calc(28px + env(safe-area-inset-bottom));
-    padding-left: calc(16px + env(safe-area-inset-left));
+    overflow: hidden;
+    touch-action: none;
+    padding: calc(8px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
+        calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(168px, 36vw);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    align-content: stretch;
+    height: var(--vv-height, 100dvh);
+    max-height: var(--vv-height, 100dvh);
+}
+body.touch-ui .menu-brand {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    gap: 8px;
+}
+body.touch-ui .brand-mark {
+    padding: 6px 10px;
+    font-size: 16px;
+}
+body.touch-ui .menu-content {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: stretch;
+    overflow: hidden;
+    min-height: 0;
+    max-width: none;
+}
+body.touch-ui .menu-content h1 {
+    font-size: clamp(22px, 6.5vw, 34px);
+    margin-bottom: 4px;
+}
+body.touch-ui .eyebrow {
+    margin-bottom: 6px;
+    font-size: 8px;
+}
+body.touch-ui .menu-intro,
+body.touch-ui .menu-footer span:last-child {
+    display: none;
+}
+body.touch-ui .cat-picker {
+    padding-top: 8px;
+}
+body.touch-ui .cat-preview {
+    height: clamp(48px, 14vh, 72px);
+}
+body.touch-ui .cat-option {
+    padding: 7px 2px;
+    font-size: 10px;
+    min-height: 40px;
+}
+body.touch-ui .start-game {
+    margin-top: 8px;
+    padding: 11px 14px;
+    font-size: 14px;
+}
+body.touch-ui .menu-status {
+    margin-top: 6px;
+    font-size: 10px;
+    min-height: 12px;
+}
+body.touch-ui .high-scores-panel {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: stretch;
+    max-width: none;
+    min-height: 0;
+    overflow: hidden;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+}
+body.touch-ui .high-scores-panel > h2 {
+    font-size: 16px;
+    margin-bottom: 6px;
+}
+body.touch-ui .high-scores-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+body.touch-ui .high-scores-list li {
+    padding: 6px 0;
+    font-size: 10px;
+}
+body.touch-ui .high-scores-rank {
+    font-size: 13px;
+}
+body.touch-ui .field-tip {
+    display: none;
+}
+body.touch-ui .pwa-install {
+    margin-top: 8px;
+    padding: 8px 10px;
+}
+body.touch-ui .pwa-install__copy {
+    font-size: 10px;
+    margin-bottom: 6px;
+}
+body.touch-ui .menu-footer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    position: static;
+    padding: 0;
+    font-size: 9px;
+}
+body.touch-ui {
+    --hud-badge-inset: 76px;
 }
 body.touch-ui .start-game,
 body.touch-ui .cat-option,
@@ -641,7 +745,10 @@ body.touch-ui .pounce-prompt-key { width: 38px; font-size: 12px; }
 
 .touch-controls {
     position: fixed;
-    inset: 0;
+    top: var(--vv-top, 0);
+    left: var(--vv-left, 0);
+    width: var(--vv-width, 100%);
+    height: var(--vv-height, 100%);
     z-index: 21;
     pointer-events: none;
     touch-action: none;
@@ -706,7 +813,7 @@ body.touch-ui .pounce-prompt-key { width: 38px; font-size: 12px; }
 }
 .touch-actions {
     position: absolute;
-    right: calc(14px + env(safe-area-inset-right));
+    right: calc(14px + env(safe-area-inset-right) + var(--hud-badge-inset, 0px));
     bottom: calc(16px + env(safe-area-inset-bottom));
     display: grid;
     grid-template-columns: 68px 68px;
@@ -796,4 +903,44 @@ body.touch-ui .pounce-prompt-key { width: 38px; font-size: 12px; }
 .mobile-orientation-gate__hint {
     font: 11px/1.5 system-ui, sans-serif;
     color: #8a9a88;
+}
+
+.pwa-install {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid #ffffff22;
+    border-radius: 12px;
+    background: rgba(12, 16, 12, 0.55);
+    text-align: left;
+}
+.pwa-install[hidden] {
+    display: none;
+}
+.pwa-install__label {
+    font: 900 10px/1.2 system-ui, sans-serif;
+    letter-spacing: 0.18em;
+    color: #caff45;
+    margin-bottom: 6px;
+}
+.pwa-install__copy {
+    font: 12px/1.55 system-ui, sans-serif;
+    color: #bcc8b8;
+    margin-bottom: 10px;
+}
+.pwa-install__copy strong {
+    color: #f5f4ea;
+}
+.pwa-install__btn {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #caff4580;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #2a3522 0%, #1a2315 100%);
+    color: #f5f4ea;
+    font: 800 12px/1 system-ui, sans-serif;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+}
+.pwa-install__btn:active {
+    transform: translateY(1px);
 }

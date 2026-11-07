@@ -1,4 +1,5 @@
 import { prefersTouchControls } from './touchControls.js';
+import { isStandalonePwa } from './pwaInstall.js';
 
 function isPortrait() {
     const type = screen.orientation?.type;
@@ -70,6 +71,16 @@ export function initMobileDisplay() {
     window.addEventListener('orientationchange', sync);
     window.matchMedia('(orientation: portrait)').addEventListener('change', sync);
     screen.orientation?.addEventListener?.('change', sync);
+
+    if (isStandalonePwa()) {
+        window.addEventListener(
+            'load',
+            () => {
+                void requestMobilePlayMode();
+            },
+            { once: true }
+        );
+    }
 
     return { sync };
 }

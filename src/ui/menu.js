@@ -106,6 +106,7 @@ export function createMenu({ player, onStart }) {
         onStart();
     });
     return {
+        element: root,
         show() {
             root.hidden = false;
         },

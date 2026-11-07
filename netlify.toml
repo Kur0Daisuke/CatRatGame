@@ -1,3 +1,6 @@
+# "Powered by Netlify" is injected by Netlify (not in this repo).
+# Turn it off for all visitors: Netlify UI → Project configuration → General → Powered by Netlify badge.
+
 [build]
   command = "npm run build"
   publish = "dist"

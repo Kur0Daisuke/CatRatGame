@@ -38,10 +38,19 @@ import { TreeClimbSystem } from './systems/treeClimb.js';
 import { createHuntSession } from './systems/huntSession.js';
 import { createTouchControls, prefersTouchControls } from './ui/touchControls.js';
 import { initMobileDisplay, requestMobilePlayMode } from './ui/mobileDisplay.js';
+import { createPwaInstallPrompt } from './ui/pwaInstall.js';
+import { registerSW } from 'virtual:pwa-register';
+import { bindVisualViewportLayout, refreshVisualViewportLayout } from './ui/visualViewport.js';
+
+bindVisualViewportLayout();
 
 if (prefersTouchControls()) {
     document.body.classList.add('touch-ui');
     initMobileDisplay();
+}
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    registerSW({ immediate: true });
 }
 
 const { scene, camera, renderer } = setupScene();
@@ -161,7 +170,8 @@ function refillRats() {
 }
 
 function startDrop() {
-    void requestMobilePlayMode(renderer.domElement);
+    void requestMobilePlayMode(renderer.domElement).then(() => refreshVisualViewportLayout());
+    refreshVisualViewportLayout();
     pounce.cancelForReset();
     treeClimb.cancelForReset();
     dogCatch.abort();
@@ -217,6 +227,10 @@ const settings = createSettings({
 });
 
 const menu = createMenu({ player, onStart() { startDrop(); } });
+const pwaInstall = createPwaInstallPrompt();
+if (pwaInstall.root) {
+    menu.element.querySelector('.menu-content')?.appendChild(pwaInstall.root);
+}
 
 function selectedCatLabel() {
     const pressed = document.querySelector('.cat-option[aria-pressed="true"]');
@@ -280,13 +294,15 @@ const touchControls = createTouchControls({
         settings.setOpen(!settings.isOpen);
     },
     getState: () => {
-        const inPlay = phase === 'playing'
-            && !settings.isOpen
-            && !huntSession.isEnded()
-            && !pounce.controlsCamera()
-            && !dogCatch.controlsCamera();
+        const inPlay =
+            (phase === 'playing' || phase === 'dropping') &&
+            !settings.isOpen &&
+            !huntSession.isEnded() &&
+            !pounce.controlsCamera() &&
+            !dogCatch.controlsCamera();
         return {
-            showStick: inPlay && !player.isLocked && !player.isStunned && !player.isRecovering,
+            showStick:
+                phase === 'playing' && inPlay && !player.isLocked && !player.isStunned && !player.isRecovering,
             showActions: inPlay,
             showLook: inPlay,
             showPause: phase !== 'menu' && !settings.isOpen && !huntSession.isEnded() && !dogCatch.isActive() && pounce.state !== 'qte',
@@ -427,6 +443,7 @@ function animate(time) {
                     phase = 'playing';
 
                     document.body.dataset.phase = phase;
+                    refreshVisualViewportLayout();
 
                     player.isDeployed = true;
 

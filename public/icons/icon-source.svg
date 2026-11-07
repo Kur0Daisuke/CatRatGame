@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cat and Rats">
+  <rect width="512" height="512" fill="#151b13"/>
+  <rect x="36" y="36" width="440" height="440" rx="56" fill="#1c2619" stroke="#caff45" stroke-width="10"/>
+  <text x="256" y="290" text-anchor="middle" font-family="Georgia, serif" font-weight="900" font-style="italic" font-size="168" fill="#caff45">C/R</text>
+  <text x="256" y="368" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="28" letter-spacing="6" fill="#bcc8b8">CAT &amp; RATS</text>
+</svg>
