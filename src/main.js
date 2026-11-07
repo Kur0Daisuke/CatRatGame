@@ -225,7 +225,7 @@ const huntSession = createHuntSession({
     onEnd() {
         player.setControlsBlocked(true);
         dogCatch.abort();
-        menu.refreshHighScores();
+        void menu.refreshHighScores();
     }
 });
 

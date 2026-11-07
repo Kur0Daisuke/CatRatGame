@@ -1,4 +1,4 @@
-import { renderHighScoresHtml } from '../systems/highScores.js';
+import { loadLeaderboard, renderHighScoresHtml } from '../systems/highScores.js';
 import * as THREE from 'three';
 import { CAT_MODELS } from '../game/player.js';
 
@@ -32,10 +32,13 @@ export function createMenu({ player, onStart }) {
             <footer class="menu-footer"><span><i></i> LIVE GARDEN</span><span>${controlsHint}</span></footer>`;
     document.body.appendChild(root);
     const scoresBody = root.querySelector('.high-scores-body');
-    function refreshHighScores() {
-        if (scoresBody) scoresBody.innerHTML = renderHighScoresHtml();
+    async function refreshHighScores() {
+        if (!scoresBody) return;
+        scoresBody.innerHTML = '<p class="high-scores-empty">Loading fastest clears…</p>';
+        await loadLeaderboard();
+        scoresBody.innerHTML = renderHighScoresHtml();
     }
-    refreshHighScores();
+    void refreshHighScores();
     const start = root.querySelector('.start-game');
     const status = root.querySelector('.menu-status');
     const buttons = [...root.querySelectorAll('[data-cat]')];

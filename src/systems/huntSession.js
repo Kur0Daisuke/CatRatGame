@@ -1,4 +1,4 @@
-import { addHighScore, formatHuntTime } from './highScores.js';
+import { formatHuntTime, submitScore } from './highScores.js';
 
 export const START_LIVES = 9;
 export const RATS_TO_WIN = 30;
@@ -103,38 +103,47 @@ export function createHuntSession({ onEnd, getCatLabel }) {
         if (lives <= 0) finish('lives');
     }
 
-    function finish(reason) {
+    async function finish(reason) {
         if (ended) return;
         ended = true;
         active = false;
         syncHud();
 
         let rank = null;
+        const caught = ratsCaught();
+
         if (reason === 'win') {
-            rank = addHighScore({
-                timeSeconds: elapsed,
-                livesLeft: lives,
-                catLabel: getCatLabel?.() ?? 'Cat'
-            });
-            const caught = ratsCaught();
             eyebrowEl.textContent = 'YARD CLEARED';
             titleEl.textContent = `${RATS_TO_WIN} rats — hunt complete.`;
-            detailEl.textContent =
-                rank != null
-                    ? `${caught} caught in ${formatHuntTime(elapsed)} · ${lives} lives left · Rank #${rank} on the board.`
-                    : `${caught} caught in ${formatHuntTime(elapsed)} · ${lives} lives left.`;
+            detailEl.textContent = 'Saving your clear to the global board…';
+            overlayEl.hidden = false;
+            if (document.pointerLockElement) document.exitPointerLock();
+
+            try {
+                const result = await submitScore({
+                    timeSeconds: elapsed,
+                    livesLeft: lives,
+                    catLabel: getCatLabel?.() ?? 'Cat'
+                });
+                rank = result.rank;
+                detailEl.textContent =
+                    rank != null
+                        ? `${caught} caught in ${formatHuntTime(elapsed)} · ${lives} lives left · Rank #${rank} on the board.`
+                        : `${caught} caught in ${formatHuntTime(elapsed)} · ${lives} lives left.`;
+            } catch {
+                detailEl.textContent = `${caught} caught in ${formatHuntTime(elapsed)} · ${lives} lives left. Could not save to the global board — try again later.`;
+            }
         } else {
             eyebrowEl.textContent = 'HUNT OVER';
             titleEl.textContent = reason === 'lives' ? 'The dog got the last of your lives.' : 'Time is up.';
-            const caught = ratsCaught();
             detailEl.textContent =
                 reason === 'lives'
                     ? `You caught ${caught} of ${RATS_TO_WIN} needed (${totalRats} on the map) in ${formatHuntTime(elapsed)}.`
                     : `You caught ${caught} of ${RATS_TO_WIN} needed.`;
+            overlayEl.hidden = false;
+            if (document.pointerLockElement) document.exitPointerLock();
         }
 
-        overlayEl.hidden = false;
-        if (document.pointerLockElement) document.exitPointerLock();
         onEnd?.({ reason, elapsed, lives, ratsRemaining, totalRats, rank });
     }
 
