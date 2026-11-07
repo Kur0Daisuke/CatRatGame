@@ -1,0 +1,10 @@
+{
+    "name": "Cat & Rats",
+    "short_name": "Cat & Rats",
+    "start_url": "/",
+    "display": "fullscreen",
+    "orientation": "landscape",
+    "background_color": "#151b13",
+    "theme_color": "#151b13",
+    "description": "A little hunt. A lot of trouble."
+}

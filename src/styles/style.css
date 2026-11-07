@@ -757,3 +757,43 @@ body.touch-ui .pounce-prompt-key { width: 38px; font-size: 12px; }
     .touch-skill { height: 60px; font-size: 18px; }
     body.touch-ui .pounce-qte-overlay { align-items: flex-start; padding-top: 14vh; }
 }
+
+.mobile-orientation-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+        max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    background: linear-gradient(165deg, #1c2619 0%, #0f1410 55%, #151b13 100%);
+    color: #f5f4ea;
+    text-align: center;
+    touch-action: none;
+}
+.mobile-orientation-gate[hidden] {
+    display: none;
+}
+.mobile-orientation-gate__card {
+    max-width: 20rem;
+}
+.mobile-orientation-gate .eyebrow {
+    color: #caff45;
+    font: 900 11px/1.2 system-ui, sans-serif;
+    letter-spacing: 0.22em;
+    margin-bottom: 10px;
+}
+.mobile-orientation-gate h2 {
+    font: 900 italic clamp(1.5rem, 6vw, 2rem) / 1.1 Georgia, serif;
+    margin-bottom: 12px;
+}
+.mobile-orientation-gate__copy {
+    font: 13px/1.55 system-ui, sans-serif;
+    color: #bcc8b8;
+    margin-bottom: 10px;
+}
+.mobile-orientation-gate__hint {
+    font: 11px/1.5 system-ui, sans-serif;
+    color: #8a9a88;
+}

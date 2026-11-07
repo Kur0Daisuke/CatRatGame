@@ -37,10 +37,12 @@ import { DogCatchSystem } from './systems/dogCatch.js';
 import { TreeClimbSystem } from './systems/treeClimb.js';
 import { createHuntSession } from './systems/huntSession.js';
 import { createTouchControls, prefersTouchControls } from './ui/touchControls.js';
+import { initMobileDisplay, requestMobilePlayMode } from './ui/mobileDisplay.js';
 
-
-
-if (prefersTouchControls()) document.body.classList.add('touch-ui');
+if (prefersTouchControls()) {
+    document.body.classList.add('touch-ui');
+    initMobileDisplay();
+}
 
 const { scene, camera, renderer } = setupScene();
 
@@ -159,6 +161,7 @@ function refillRats() {
 }
 
 function startDrop() {
+    void requestMobilePlayMode(renderer.domElement);
     pounce.cancelForReset();
     treeClimb.cancelForReset();
     dogCatch.abort();
